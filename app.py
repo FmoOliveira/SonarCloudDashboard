@@ -222,7 +222,8 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                 
                 if coverage_info["has_coverage"]:
                     # We have sufficient data coverage, use stored data
-                    stored_data = _storage.retrieve_metrics_data(project_key, branch, days)
+                    # Optimization: Use data pre-fetched during coverage check to avoid redundant DB call
+                    stored_data = coverage_info.get("data", [])
                     if stored_data:
                         st.info(f"✅ Using {coverage_info['record_count']} stored records for {project_key} (latest: {coverage_info['latest_date']})")
                         all_data.extend(stored_data)

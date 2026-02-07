@@ -195,7 +195,8 @@ class AzureTableStorage:
                 "latest_date": latest_stored.strftime('%Y-%m-%d'),
                 "days_since_latest": days_since_latest,
                 "missing_metrics": missing_metrics,
-                "reason": f"Data coverage: {len(stored_data)} records, latest: {latest_stored.strftime('%Y-%m-%d')}"
+                "reason": f"Data coverage: {len(stored_data)} records, latest: {latest_stored.strftime('%Y-%m-%d')}",
+                "data": stored_data
             }
             
         except Exception as e:
