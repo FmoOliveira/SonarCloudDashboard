@@ -98,15 +98,15 @@ class AzureTableStorage:
         try:
             partition_key = f"{project_key}_{branch}" if branch else project_key
             
-            # Query entities for the specified partition
-            filter_query = f"PartitionKey eq '{partition_key}'"
-            
             # Add date filter for the last N days
             from datetime import timedelta
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-            filter_query += f" and Date ge '{start_date}'"
             
-            entities = self.table_client.query_entities(filter_query)
+            # Use parameterized query to prevent injection
+            filter_query = "PartitionKey eq @pk and Date ge @start_date"
+            parameters = {"pk": partition_key, "start_date": start_date}
+
+            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
             
             # Convert entities to list of dictionaries
             results = []
@@ -223,9 +223,12 @@ class AzureTableStorage:
         """Delete all data for a specific project and branch"""
         try:
             partition_key = f"{project_key}_{branch}" if branch else project_key
-            filter_query = f"PartitionKey eq '{partition_key}'"
             
-            entities = self.table_client.query_entities(filter_query)
+            # Use parameterized query to prevent injection
+            filter_query = "PartitionKey eq @pk"
+            parameters = {"pk": partition_key}
+
+            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
             
             for entity in entities:
                 self.table_client.delete_entity(
