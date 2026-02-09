@@ -103,8 +103,14 @@ class AzureTableStorage:
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
             
             # Use parameterized query to prevent injection
-            filter_query = "PartitionKey eq @pk and Date ge @start_date"
-            parameters = {"pk": partition_key, "start_date": start_date}
+            # Also filter by ProjectKey and Branch to prevent partition key collisions
+            filter_query = "PartitionKey eq @pk and ProjectKey eq @project_key and Branch eq @branch and Date ge @start_date"
+            parameters = {
+                "pk": partition_key,
+                "project_key": project_key,
+                "branch": branch or "main",
+                "start_date": start_date
+            }
 
             entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
             
@@ -225,8 +231,13 @@ class AzureTableStorage:
             partition_key = f"{project_key}_{branch}" if branch else project_key
             
             # Use parameterized query to prevent injection
-            filter_query = "PartitionKey eq @pk"
-            parameters = {"pk": partition_key}
+            # Also filter by ProjectKey and Branch to prevent partition key collisions
+            filter_query = "PartitionKey eq @pk and ProjectKey eq @project_key and Branch eq @branch"
+            parameters = {
+                "pk": partition_key,
+                "project_key": project_key,
+                "branch": branch or "main"
+            }
 
             entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
             
