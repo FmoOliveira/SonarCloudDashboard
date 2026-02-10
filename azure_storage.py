@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
@@ -21,6 +22,23 @@ class AzureTableStorage:
             # Table might already exist
             pass
     
+    def _get_partition_key(self, project_key: str, branch: str = None) -> str:
+        """Create a sanitized partition key from project and branch"""
+        raw_key = f"{project_key}_{branch}" if branch else project_key
+
+        # Azure Table Storage invalid characters for PartitionKey:
+        # / \ # ? and control characters
+        # We replace them with an underscore to prevent errors
+        sanitized_key = raw_key
+        for char in ['/', '\\', '#', '?']:
+            sanitized_key = sanitized_key.replace(char, '_')
+
+        # Replace control characters with underscore using regex
+        # Control characters: \x00-\x1f and \x7f-\x9f
+        sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+
+        return sanitized_key
+
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
         """Store metrics data in Azure Table Storage"""
         try:
@@ -28,7 +46,7 @@ class AzureTableStorage:
             
             for _, row in metrics_data.iterrows():
                 # Create partition key based on project and branch
-                partition_key = f"{project_key}_{branch}" if branch else project_key
+                partition_key = self._get_partition_key(project_key, branch)
                 
                 # Create row key based on date and a timestamp for uniqueness
                 date_str = str(row.get('date', datetime.now().strftime('%Y-%m-%d')))
@@ -96,7 +114,7 @@ class AzureTableStorage:
     def retrieve_metrics_data(self, project_key: str, branch: str = None, days: int = 30) -> List[Dict]:
         """Retrieve metrics data from Azure Table Storage"""
         try:
-            partition_key = f"{project_key}_{branch}" if branch else project_key
+            partition_key = self._get_partition_key(project_key, branch)
             
             # Add date filter for the last N days
             from datetime import timedelta
@@ -228,7 +246,7 @@ class AzureTableStorage:
     def delete_project_data(self, project_key: str, branch: str = None) -> bool:
         """Delete all data for a specific project and branch"""
         try:
-            partition_key = f"{project_key}_{branch}" if branch else project_key
+            partition_key = self._get_partition_key(project_key, branch)
             
             # Use parameterized query to prevent injection
             # Also filter by ProjectKey and Branch to prevent partition key collisions
