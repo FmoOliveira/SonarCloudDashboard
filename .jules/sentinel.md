@@ -7,3 +7,8 @@
 **Vulnerability:** Found a logic vulnerability where different `project_key` and `branch` combinations (e.g., `my_project` + `main` vs. `my` + `project_main`) resulted in the same `PartitionKey`, leading to data mixing and potential data loss during deletion.
 **Learning:** Concatenating strings to form a key without a unique separator or encoding can lead to collisions. Relying solely on a derived key for security/isolation is dangerous.
 **Prevention:** Always filter by the original unique properties (`ProjectKey` and `Branch`) in addition to the derived key (`PartitionKey`) to ensure operations affect only the intended data.
+
+## 2025-05-22 - Azure Table Storage PartitionKey Sanitization
+**Vulnerability:** Application crashed when storing metrics for branches with names containing '/', because Azure Table Storage PartitionKey forbids '/', '\', '#', '?'.
+**Learning:** Input validation must extend to storage keys. Even if the value is safe for query parameters, it might be invalid as a key component.
+**Prevention:** Sanitize derived keys (PartitionKey, RowKey) by replacing invalid characters before use. Ensure collision handling (e.g. secondary filters) is in place if sanitization reduces entropy.
