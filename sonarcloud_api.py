@@ -12,12 +12,12 @@ class SonarCloudAPI:
         self.session = requests.Session()
         self.session.auth = (token, '')
         
-    def _make_request(self, endpoint: str, params: Dict = None) -> Dict:
+    def _make_request(self, endpoint: str, params: Dict = None, timeout: int = 30) -> Dict:
         """Make authenticated request to SonarCloud API"""
         url = f"{self.base_url}/{endpoint}"
         
         try:
-            response = self.session.get(url, params=params)
+            response = self.session.get(url, params=params, timeout=timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
