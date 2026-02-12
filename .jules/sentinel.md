@@ -12,3 +12,8 @@
 **Vulnerability:** Application crashed when storing metrics for branches with names containing '/', because Azure Table Storage PartitionKey forbids '/', '\', '#', '?'.
 **Learning:** Input validation must extend to storage keys. Even if the value is safe for query parameters, it might be invalid as a key component.
 **Prevention:** Sanitize derived keys (PartitionKey, RowKey) by replacing invalid characters before use. Ensure collision handling (e.g. secondary filters) is in place if sanitization reduces entropy.
+
+## 2026-02-11 - External API Request Timeouts
+**Vulnerability:** The application made external API calls to SonarCloud without specifying a timeout, making it vulnerable to indefinite hangs if the service is unresponsive (DoS).
+**Learning:** Python's `requests` library does not enforce a timeout by default. Relying on default behavior for external dependencies can introduce availability risks.
+**Prevention:** Always specify a `timeout` parameter (e.g., `timeout=30`) when making network requests to prevent resource exhaustion and application freezes.
