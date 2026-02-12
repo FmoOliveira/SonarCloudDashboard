@@ -17,3 +17,13 @@
 **Vulnerability:** The application made external API calls to SonarCloud without specifying a timeout, making it vulnerable to indefinite hangs if the service is unresponsive (DoS).
 **Learning:** Python's `requests` library does not enforce a timeout by default. Relying on default behavior for external dependencies can introduce availability risks.
 **Prevention:** Always specify a `timeout` parameter (e.g., `timeout=30`) when making network requests to prevent resource exhaustion and application freezes.
+
+## 2026-03-01 - Azure Table Storage Full Table Scan (DoS)
+**Vulnerability:** The `get_stored_projects` method listed all entities in the `SonarCloudMetrics` table without projection, leading to excessive data transfer and potential resource exhaustion (DoS) as the table grows.
+**Learning:** Fetching full entities when only a specific property is needed is a common anti-pattern that degrades performance and availability.
+**Prevention:** Use the `select` parameter in `list_entities` (e.g., `select='ProjectKey'`) to retrieve only the necessary fields, minimizing payload size and latency.
+
+## 2026-03-01 - Azure Table Storage PartitionKey Length Validation
+**Vulnerability:** The `_get_partition_key` method did not validate the length of the generated PartitionKey, allowing potentially unlimited input length which could cause API errors or other issues. Azure limits PartitionKey to 1 KiB.
+**Learning:** Input validation must include length constraints imposed by the underlying storage system to prevent API failures and potential DoS vectors.
+**Prevention:** Enforce length limits on derived keys before attempting storage operations (e.g., raise `ValueError` if `len(key) > 1024`).

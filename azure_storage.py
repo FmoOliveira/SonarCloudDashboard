@@ -37,6 +37,9 @@ class AzureTableStorage:
         # Control characters: \x00-\x1f and \x7f-\x9f
         sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
 
+        if len(sanitized_key) > 1024:
+            raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
+
         return sanitized_key
 
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
@@ -229,8 +232,9 @@ class AzureTableStorage:
     def get_stored_projects(self) -> List[str]:
         """Get list of projects stored in Azure Table Storage"""
         try:
-            # Query all entities and extract unique project keys
-            entities = self.table_client.list_entities()
+            # Query all entities using projection to fetch only ProjectKey
+            # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
+            entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
             for entity in entities:
