@@ -27,3 +27,8 @@
 **Vulnerability:** The `_get_partition_key` method did not validate the length of the generated PartitionKey, allowing potentially unlimited input length which could cause API errors or other issues. Azure limits PartitionKey to 1 KiB.
 **Learning:** Input validation must include length constraints imposed by the underlying storage system to prevent API failures and potential DoS vectors.
 **Prevention:** Enforce length limits on derived keys before attempting storage operations (e.g., raise `ValueError` if `len(key) > 1024`).
+
+## 2026-03-15 - Efficient Metadata Retrieval (DoS Mitigation)
+**Vulnerability:** Even with field projection, `list_entities` performs a full table scan, which is a DoS vector for large datasets in NoSQL stores like Azure Table Storage.
+**Learning:** To list unique entities efficiently without scanning, a separate partition or table acting as a secondary index is required.
+**Prevention:** Implemented a 'Read-Through Cache' pattern using a dedicated `METADATA_PROJECTS` partition. The application first queries this small partition, and falls back to a scan (with lazy backfill) only if necessary.
