@@ -22,20 +22,25 @@ class AzureTableStorage:
             # Table might already exist
             pass
     
-    def _get_partition_key(self, project_key: str, branch: str = None) -> str:
-        """Create a sanitized partition key from project and branch"""
-        raw_key = f"{project_key}_{branch}" if branch else project_key
-
-        # Azure Table Storage invalid characters for PartitionKey:
+    def _sanitize_key(self, key: str) -> str:
+        """Sanitize a key for Azure Table Storage (PartitionKey or RowKey)"""
+        # Azure Table Storage invalid characters:
         # / \ # ? and control characters
-        # We replace them with an underscore to prevent errors
-        sanitized_key = raw_key
+        sanitized_key = key
         for char in ['/', '\\', '#', '?']:
             sanitized_key = sanitized_key.replace(char, '_')
 
         # Replace control characters with underscore using regex
         # Control characters: \x00-\x1f and \x7f-\x9f
         sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+
+        return sanitized_key
+
+    def _get_partition_key(self, project_key: str, branch: str = None) -> str:
+        """Create a sanitized partition key from project and branch"""
+        raw_key = f"{project_key}_{branch}" if branch else project_key
+
+        sanitized_key = self._sanitize_key(raw_key)
 
         if len(sanitized_key) > 1024:
             raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
@@ -45,6 +50,18 @@ class AzureTableStorage:
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
         """Store metrics data in Azure Table Storage"""
         try:
+            # Store project metadata for efficient retrieval (DoS mitigation)
+            try:
+                metadata_entity = {
+                    "PartitionKey": "METADATA_PROJECTS",
+                    "RowKey": self._sanitize_key(project_key),
+                    "ProjectKey": project_key
+                }
+                self.table_client.upsert_entity(metadata_entity)
+            except Exception as meta_error:
+                # Non-critical, just log warning
+                st.warning(f"Failed to update project metadata: {str(meta_error)}")
+
             entities = []
             
             for _, row in metrics_data.iterrows():
@@ -232,6 +249,19 @@ class AzureTableStorage:
     def get_stored_projects(self) -> List[str]:
         """Get list of projects stored in Azure Table Storage"""
         try:
+            # Try efficient metadata query first
+            try:
+                metadata_entities = self.table_client.query_entities(
+                    query_filter="PartitionKey eq 'METADATA_PROJECTS'",
+                    select=['ProjectKey']
+                )
+                projects = {e['ProjectKey'] for e in metadata_entities}
+                if projects:
+                    return list(projects)
+            except Exception:
+                # Fallback to full scan if metadata query fails
+                pass
+
             # Query all entities using projection to fetch only ProjectKey
             # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
             entities = self.table_client.list_entities(select='ProjectKey')
@@ -241,6 +271,17 @@ class AzureTableStorage:
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
+            # Backfill metadata for found projects (Self-healing)
+            for project in projects:
+                try:
+                    self.table_client.upsert_entity({
+                        "PartitionKey": "METADATA_PROJECTS",
+                        "RowKey": self._sanitize_key(project),
+                        "ProjectKey": project
+                    })
+                except Exception:
+                    pass
+
             return list(projects)
             
         except Exception as e:
