@@ -27,3 +27,8 @@
 **Vulnerability:** The `_get_partition_key` method did not validate the length of the generated PartitionKey, allowing potentially unlimited input length which could cause API errors or other issues. Azure limits PartitionKey to 1 KiB.
 **Learning:** Input validation must include length constraints imposed by the underlying storage system to prevent API failures and potential DoS vectors.
 **Prevention:** Enforce length limits on derived keys before attempting storage operations (e.g., raise `ValueError` if `len(key) > 1024`).
+
+## 2026-03-02 - Azure Table Storage Scan Vulnerability (DoS via list_entities)
+**Vulnerability:** The `get_stored_projects` method relied on `list_entities` (even with projection), which performs a full table scan. As data volume grows, this linear scan becomes a DoS vector, causing timeouts and high latency.
+**Learning:** Projections (`select=...`) reduce bandwidth but do not prevent the underlying storage engine from scanning all rows if no partition key is specified. Efficient querying requires hitting a specific partition.
+**Prevention:** Implement a "Metadata Partition" pattern (e.g., `PartitionKey="METADATA"`) to maintain a separate index of unique entities, allowing O(1) partition scans instead of O(N) full table scans.

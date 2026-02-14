@@ -70,13 +70,23 @@ class TestAzureStorageSanitization(unittest.TestCase):
 
         self.storage.delete_project_data(project_key, branch)
 
-        call_args = self.mock_table_client.query_entities.call_args
-        parameters = call_args.kwargs.get('parameters')
+        found_call = False
+        for call_args in self.mock_table_client.query_entities.call_args_list:
+            query_filter = call_args.kwargs.get('query_filter')
+            if not query_filter and len(call_args[0]) > 0:
+                query_filter = call_args[0][0]
 
-        pk = parameters['pk']
-        self.assertNotIn('/', pk)
-        self.assertIn('_', pk)
-        print(f"Delete sanitized PK: {pk}")
+            if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
+                found_call = True
+                parameters = call_args.kwargs.get('parameters')
+
+                pk = parameters['pk']
+                self.assertNotIn('/', pk)
+                self.assertIn('_', pk)
+                print(f"Delete sanitized PK: {pk}")
+                break
+
+        self.assertTrue(found_call, "Sanitization check query not found")
 
     def test_partition_key_sanitizes_control_characters(self):
         """Test that PartitionKey sanitizes control characters"""
@@ -87,15 +97,25 @@ class TestAzureStorageSanitization(unittest.TestCase):
         # Since _get_partition_key is internal, let's test via delete_project_data
         self.storage.delete_project_data(project_key, branch)
 
-        call_args = self.mock_table_client.query_entities.call_args
-        parameters = call_args.kwargs.get('parameters')
-        pk = parameters['pk']
+        found_call = False
+        for call_args in self.mock_table_client.query_entities.call_args_list:
+            query_filter = call_args.kwargs.get('query_filter')
+            if not query_filter and len(call_args[0]) > 0:
+                query_filter = call_args[0][0]
 
-        # Should replace \n and \t with _
-        self.assertNotIn('\n', pk)
-        self.assertNotIn('\t', pk)
-        self.assertIn('_', pk)
-        print(f"Control chars sanitized PK: {repr(pk)}")
+            if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
+                found_call = True
+                parameters = call_args.kwargs.get('parameters')
+                pk = parameters['pk']
+
+                # Should replace \n and \t with _
+                self.assertNotIn('\n', pk)
+                self.assertNotIn('\t', pk)
+                self.assertIn('_', pk)
+                print(f"Control chars sanitized PK: {repr(pk)}")
+                break
+
+        self.assertTrue(found_call, "Control char sanitization query not found")
 
 if __name__ == '__main__':
     unittest.main()
