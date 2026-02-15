@@ -9,6 +9,10 @@ from typing import Dict, List
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+    # Constants for metadata partitioning
+    METADATA_PARTITION = "METADATA_PROJECTS"
+    MIGRATION_MARKER = "MIGRATION_STATUS"
+
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
         self.table_name = table_name
@@ -108,6 +112,18 @@ class AzureTableStorage:
                         st.error(f"Failed to store batch: {str(batch_error)}")
                         return False
             
+            # Update metadata partition with project info
+            try:
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": project_key,
+                    "ProjectKey": project_key,
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as meta_error:
+                # Log but don't fail the whole operation if metadata update fails
+                st.warning(f"Failed to update project metadata: {str(meta_error)}")
+
             return True
             
         except Exception as e:
@@ -230,10 +246,36 @@ class AzureTableStorage:
             return {"has_coverage": False, "reason": f"Error checking coverage: {str(e)}"}
     
     def get_stored_projects(self) -> List[str]:
-        """Get list of projects stored in Azure Table Storage"""
+        """Get list of projects stored in Azure Table Storage using optimized metadata index"""
         try:
+            # First, check if migration to metadata partition is complete
+            try:
+                migration_status = self.table_client.get_entity(
+                    partition_key=self.METADATA_PARTITION,
+                    row_key=self.MIGRATION_MARKER
+                )
+                if migration_status.get('Status') == 'Complete':
+                    # Migration complete, use metadata index (fast)
+                    # Query only the metadata partition
+                    metadata_entities = self.table_client.query_entities(
+                        query_filter="PartitionKey eq @pk",
+                        parameters={"pk": self.METADATA_PARTITION},
+                        select=['RowKey']
+                    )
+
+                    projects = []
+                    for entity in metadata_entities:
+                        # Exclude the marker entity itself
+                        if entity['RowKey'] != self.MIGRATION_MARKER:
+                            projects.append(entity['RowKey'])
+
+                    return projects
+            except Exception:
+                # Migration marker not found or other error, fallback to scan
+                pass
+
+            # Fallback: Full table scan (slow, but needed for initial migration)
             # Query all entities using projection to fetch only ProjectKey
-            # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
@@ -241,7 +283,30 @@ class AzureTableStorage:
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
-            return list(projects)
+            project_list = list(projects)
+
+            # Backfill metadata partition
+            try:
+                # Upsert all found projects to metadata partition
+                for project in project_list:
+                    self.table_client.upsert_entity({
+                        "PartitionKey": self.METADATA_PARTITION,
+                        "RowKey": project,
+                        "ProjectKey": project,
+                        "LastUpdated": datetime.now().isoformat()
+                    })
+
+                # Mark migration as complete
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": self.MIGRATION_MARKER,
+                    "Status": "Complete",
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as backfill_error:
+                st.warning(f"Metadata backfill failed: {str(backfill_error)}")
+
+            return project_list
             
         except Exception as e:
             st.warning(f"Failed to retrieve stored projects: {str(e)}")
