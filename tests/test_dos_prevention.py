@@ -1,0 +1,101 @@
+import unittest
+from unittest.mock import MagicMock, patch, call
+import pandas as pd
+from azure_storage import AzureTableStorage
+
+class TestDoSPrevention(unittest.TestCase):
+    def setUp(self):
+        self.connection_string = "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test;EndpointSuffix=core.windows.net"
+        self.table_name = "TestTable"
+
+        with patch('azure.data.tables.TableServiceClient.from_connection_string') as mock_service_client:
+            self.mock_table_client = MagicMock()
+            mock_service_client.return_value.get_table_client.return_value = self.mock_table_client
+            self.storage = AzureTableStorage(self.connection_string, self.table_name)
+
+    def test_get_stored_projects_uses_metadata_if_available(self):
+        """Test that get_stored_projects uses metadata partition if migration is complete"""
+        # Mock migration status entity
+        migration_status = {
+            'PartitionKey': 'METADATA_PROJECTS',
+            'RowKey': 'MIGRATION_STATUS',
+            'Status': 'Complete'
+        }
+
+        # Mock project entities in metadata
+        project1 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'proj1', 'ProjectKey': 'proj1'}
+        project2 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'proj2', 'ProjectKey': 'proj2'}
+
+        # 1. get_entity returns migration status
+        self.mock_table_client.get_entity.return_value = migration_status
+
+        # 2. query_entities returns projects (including migration status potentially, which should be filtered)
+        self.mock_table_client.query_entities.return_value = [migration_status, project1, project2]
+
+        projects = self.storage.get_stored_projects()
+
+        # Check get_entity was called with correct keys
+        self.mock_table_client.get_entity.assert_called_with(
+            partition_key='METADATA_PROJECTS',
+            row_key='MIGRATION_STATUS'
+        )
+
+        self.assertIn('proj1', projects)
+        self.assertIn('proj2', projects)
+        self.assertNotIn('MIGRATION_STATUS', projects)
+
+        # Verify list_entities (full scan) was NOT called
+        self.mock_table_client.list_entities.assert_not_called()
+
+    def test_get_stored_projects_performs_scan_and_backfill_if_migration_incomplete(self):
+        """Test that get_stored_projects scans and backfills if migration is incomplete"""
+
+        # 1. get_entity raises exception (not found)
+        self.mock_table_client.get_entity.side_effect = Exception("Not found")
+
+        # 2. list_entities returns all data (simulation of full scan)
+        self.mock_table_client.list_entities.return_value = [
+            {'ProjectKey': 'projA'},
+            {'ProjectKey': 'projA'}, # Duplicate
+            {'ProjectKey': 'projB'}
+        ]
+
+        projects = self.storage.get_stored_projects()
+
+        self.assertCountEqual(projects, ['projA', 'projB'])
+
+        # Verify backfill occurred
+        # upsert_entity should be called for projA, projB, and MIGRATION_STATUS
+        upsert_calls = self.mock_table_client.upsert_entity.call_args_list
+        self.assertEqual(len(upsert_calls), 3)
+
+        # extract the entities passed to upsert
+        upserted_entities = [c[0][0] for c in upsert_calls]
+
+        row_keys = [e['RowKey'] for e in upserted_entities]
+        self.assertIn('projA', row_keys)
+        self.assertIn('projB', row_keys)
+        self.assertIn('MIGRATION_STATUS', row_keys)
+
+    def test_store_metrics_sanitizes_metadata_row_key(self):
+        """Test that storing metrics sanitizes the metadata RowKey"""
+        project_key = "my/project"
+        branch = "main"
+        metrics_data = pd.DataFrame([{'date': '2023-01-01', 'bugs': 1}])
+
+        self.storage.store_metrics_data(metrics_data, project_key, branch)
+
+        # Find the call with PartitionKey=METADATA_PARTITION
+        found = False
+        for call_args in self.mock_table_client.upsert_entity.call_args_list:
+            entity = call_args[0][0]
+            if entity.get('PartitionKey') == 'METADATA_PROJECTS':
+                self.assertEqual(entity['RowKey'], 'my_project')
+                self.assertEqual(entity['ProjectKey'], 'my/project')
+                found = True
+                break
+
+        self.assertTrue(found, "Metadata upsert not found")
+
+if __name__ == '__main__':
+    unittest.main()

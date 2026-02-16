@@ -9,6 +9,9 @@ from typing import Dict, List
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+    METADATA_PARTITION = "METADATA_PROJECTS"
+    MIGRATION_MARKER_ROW = "MIGRATION_STATUS"
+
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
         self.table_name = table_name
@@ -22,20 +25,18 @@ class AzureTableStorage:
             # Table might already exist
             pass
     
+    def _sanitize_key(self, key: str) -> str:
+        """Sanitize key for Azure Table Storage"""
+        sanitized_key = key
+        for char in ['/', '\\', '#', '?']:
+            sanitized_key = sanitized_key.replace(char, '_')
+        sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+        return sanitized_key
+
     def _get_partition_key(self, project_key: str, branch: str = None) -> str:
         """Create a sanitized partition key from project and branch"""
         raw_key = f"{project_key}_{branch}" if branch else project_key
-
-        # Azure Table Storage invalid characters for PartitionKey:
-        # / \ # ? and control characters
-        # We replace them with an underscore to prevent errors
-        sanitized_key = raw_key
-        for char in ['/', '\\', '#', '?']:
-            sanitized_key = sanitized_key.replace(char, '_')
-
-        # Replace control characters with underscore using regex
-        # Control characters: \x00-\x1f and \x7f-\x9f
-        sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+        sanitized_key = self._sanitize_key(raw_key)
 
         if len(sanitized_key) > 1024:
             raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
@@ -107,6 +108,19 @@ class AzureTableStorage:
                     except Exception as batch_error:
                         st.error(f"Failed to store batch: {str(batch_error)}")
                         return False
+
+            # Update metadata partition
+            try:
+                # Sanitize RowKey to handle special characters in project_key
+                metadata_row_key = self._sanitize_key(project_key)
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": metadata_row_key,
+                    "ProjectKey": project_key,
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as e:
+                st.warning(f"Failed to update project metadata: {str(e)}")
             
             return True
             
@@ -232,6 +246,40 @@ class AzureTableStorage:
     def get_stored_projects(self) -> List[str]:
         """Get list of projects stored in Azure Table Storage"""
         try:
+            # Try to get from metadata partition first
+            try:
+                # Check migration status
+                # We use query_entities because get_entity might raise ResourceNotFound which is slower to handle in some SDKs,
+                # but get_entity is cleaner. Let's use get_entity inside try/except.
+                try:
+                    status_entity = self.table_client.get_entity(
+                        partition_key=self.METADATA_PARTITION,
+                        row_key=self.MIGRATION_MARKER_ROW
+                    )
+                    is_complete = status_entity.get('Status') == 'Complete'
+                except Exception:
+                    is_complete = False
+
+                if is_complete:
+                    # Query all projects from metadata partition
+                    entities = self.table_client.query_entities(
+                        query_filter="PartitionKey eq @pk",
+                        parameters={"pk": self.METADATA_PARTITION},
+                        select=["ProjectKey", "RowKey"]
+                    )
+
+                    projects = []
+                    for entity in entities:
+                        if entity['RowKey'] != self.MIGRATION_MARKER_ROW and 'ProjectKey' in entity:
+                            projects.append(entity['ProjectKey'])
+
+                    if projects:
+                        return sorted(list(set(projects)))
+            except Exception:
+                # Metadata access failed, fall back to scan
+                pass
+
+            # Fallback: Full scan
             # Query all entities using projection to fetch only ProjectKey
             # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
             entities = self.table_client.list_entities(select='ProjectKey')
@@ -241,6 +289,31 @@ class AzureTableStorage:
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
+            # Backfill metadata
+            if projects:
+                for project_key in projects:
+                    try:
+                        metadata_row_key = self._sanitize_key(project_key)
+                        self.table_client.upsert_entity({
+                            "PartitionKey": self.METADATA_PARTITION,
+                            "RowKey": metadata_row_key,
+                            "ProjectKey": project_key,
+                            "LastUpdated": datetime.now().isoformat()
+                        })
+                    except Exception:
+                        pass
+
+                # Mark migration as complete
+                try:
+                    self.table_client.upsert_entity({
+                        "PartitionKey": self.METADATA_PARTITION,
+                        "RowKey": self.MIGRATION_MARKER_ROW,
+                        "Status": "Complete",
+                        "LastUpdated": datetime.now().isoformat()
+                    })
+                except Exception:
+                    pass
+
             return list(projects)
             
         except Exception as e:
