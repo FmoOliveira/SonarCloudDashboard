@@ -107,6 +107,21 @@ class AzureTableStorage:
                     except Exception as batch_error:
                         st.error(f"Failed to store batch: {str(batch_error)}")
                         return False
+
+            # Update metadata project list (DoS prevention: avoid full table scans)
+            try:
+                # Create a sanitized row key for the metadata partition
+                # We use the same sanitization logic as _get_partition_key but strictly for the project key
+                metadata_rk = self._get_partition_key(project_key, branch=None)
+                metadata_entity = {
+                    "PartitionKey": "METADATA_PROJECTS",
+                    "RowKey": metadata_rk,
+                    "ProjectKey": project_key
+                }
+                self.table_client.upsert_entity(metadata_entity)
+            except Exception as e:
+                # Don't fail the whole operation if metadata update fails, but log it
+                st.warning(f"Failed to update project metadata: {str(e)}")
             
             return True
             
@@ -232,8 +247,44 @@ class AzureTableStorage:
     def get_stored_projects(self) -> List[str]:
         """Get list of projects stored in Azure Table Storage"""
         try:
+            metadata_pk = "METADATA_PROJECTS"
+            migration_rk = "MIGRATION_STATUS"
+
+            # Check migration status first
+            # DoS Prevention: If we have migrated, we can use an efficient query instead of a full scan
+            is_migrated = False
+            try:
+                self.table_client.get_entity(partition_key=metadata_pk, row_key=migration_rk)
+                is_migrated = True
+            except Exception:
+                is_migrated = False
+
+            if is_migrated:
+                # Fast path: efficient query against metadata partition
+                try:
+                    # Query only the metadata partition
+                    # Note: We filter by PartitionKey. This is efficient.
+                    filter_query = "PartitionKey eq @pk"
+                    entities = self.table_client.query_entities(
+                        query_filter=filter_query,
+                        parameters={"pk": metadata_pk},
+                        select=['ProjectKey', 'RowKey'] # Only fetch needed fields
+                    )
+
+                    projects = set()
+                    for entity in entities:
+                        # Exclude the status marker
+                        if entity.get('RowKey') != migration_rk and 'ProjectKey' in entity:
+                            projects.add(entity['ProjectKey'])
+                    return list(projects)
+                except Exception as e:
+                    # If fast path fails, log warning and fall back to slow path
+                    st.warning(f"Metadata query failed, falling back to scan: {str(e)}")
+
+            # Slow path: Full table scan (Legacy/Fallback)
+            # This logic also handles the "first run" migration
+
             # Query all entities using projection to fetch only ProjectKey
-            # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
@@ -241,6 +292,26 @@ class AzureTableStorage:
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
+            # Perform lazy migration if we found projects
+            if projects and not is_migrated:
+                try:
+                    for project in projects:
+                        rk = self._get_partition_key(project, branch=None)
+                        self.table_client.upsert_entity({
+                            "PartitionKey": metadata_pk,
+                            "RowKey": rk,
+                            "ProjectKey": project
+                        })
+
+                    # Mark migration as complete
+                    self.table_client.upsert_entity({
+                        "PartitionKey": metadata_pk,
+                        "RowKey": migration_rk,
+                        "Status": "Complete"
+                    })
+                except Exception as e:
+                    st.warning(f"Failed to migrate project metadata: {str(e)}")
+
             return list(projects)
             
         except Exception as e:
