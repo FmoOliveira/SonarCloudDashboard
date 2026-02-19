@@ -32,3 +32,8 @@
 **Vulnerability:** The `get_stored_projects` method performed a full table scan (iterating all entities) even with projection, which scales linearly with data size and can lead to timeouts or resource exhaustion.
 **Learning:** Projection (`select`) reduces payload size but not the scan cost on the server side for finding entities. Primary keys (PartitionKey) must be used for efficient retrieval.
 **Prevention:** Implement a "Metadata Partition" pattern: maintain a separate partition that indexes unique entities (projects), allowing O(1) or O(N_projects) retrieval instead of O(N_total_records).
+
+## 2026-03-03 - Azure Table Storage Metadata RowKey Collision
+**Vulnerability:** The `METADATA_PROJECTS` partition used a sanitized `ProjectKey` as its `RowKey`. Because sanitization (replacing `/` with `_`) is lossy, different project keys (e.g. `project/A` and `project_A`) resulted in the same `RowKey`, causing one to overwrite the other in the index.
+**Learning:** When using derived keys for uniqueness in a NoSQL store, ensure the derivation function is collision-resistant. Simple string replacement reduces entropy and causes collisions.
+**Prevention:** Use a cryptographic hash (SHA-256) of the original value as the key when the value contains invalid characters, ensuring both uniqueness and compliance with storage constraints.

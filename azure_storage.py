@@ -1,5 +1,6 @@
 import os
 import re
+import hashlib
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
@@ -41,6 +42,12 @@ class AzureTableStorage:
             raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
 
         return sanitized_key
+
+    def _get_metadata_row_key(self, project_key: str) -> str:
+        """Create a secure, collision-free row key for metadata partition using SHA256"""
+        # We use a hash to ensure unique project keys map to unique row keys
+        # regardless of special characters that might be sanitized away in a simple string replacement
+        return hashlib.sha256(project_key.encode('utf-8')).hexdigest()
 
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
         """Store metrics data in Azure Table Storage"""
@@ -110,9 +117,8 @@ class AzureTableStorage:
 
             # Update metadata project list (DoS prevention: avoid full table scans)
             try:
-                # Create a sanitized row key for the metadata partition
-                # We use the same sanitization logic as _get_partition_key but strictly for the project key
-                metadata_rk = self._get_partition_key(project_key, branch=None)
+                # Use secure hash for RowKey to prevent collisions (e.g. project/A vs project_A)
+                metadata_rk = self._get_metadata_row_key(project_key)
                 metadata_entity = {
                     "PartitionKey": "METADATA_PROJECTS",
                     "RowKey": metadata_rk,
@@ -296,7 +302,8 @@ class AzureTableStorage:
             if projects and not is_migrated:
                 try:
                     for project in projects:
-                        rk = self._get_partition_key(project, branch=None)
+                        # Use secure hash for RowKey to prevent collisions
+                        rk = self._get_metadata_row_key(project)
                         self.table_client.upsert_entity({
                             "PartitionKey": metadata_pk,
                             "RowKey": rk,
