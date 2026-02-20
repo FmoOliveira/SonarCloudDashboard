@@ -154,7 +154,21 @@ class AzureTableStorage:
                 "start_date": start_date
             }
 
-            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
+            # Define allowed columns to prevent excessive data exposure
+            # We explicitly select only the metrics we need, plus identification fields
+            select_columns = [
+                'ProjectKey', 'Branch', 'Date',
+                'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
+                'vulnerabilities', 'security_rating', 'security_hotspots',
+                'security_review_rating', 'security_hotspots_reviewed', 'code_smells',
+                'sqale_rating', 'major_violations', 'minor_violations', 'violations'
+            ]
+
+            entities = self.table_client.query_entities(
+                query_filter=filter_query,
+                parameters=parameters,
+                select=select_columns
+            )
             
             # Convert entities to list of dictionaries
             results = []
