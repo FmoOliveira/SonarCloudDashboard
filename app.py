@@ -142,6 +142,8 @@ def main():
             try:
                 stored_projects = storage.get_stored_projects()
                 st.info(f"📊 {len(stored_projects)} projects in storage")
+                if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"⚠️ Project limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
             except Exception as e:
                 st.warning(f"Storage status unavailable: {str(e)}")
     
@@ -226,6 +228,10 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                     stored_data = coverage_info.get("data", [])
                     if stored_data:
                         st.info(f"✅ Using {coverage_info['record_count']} stored records for {project_key} (latest: {coverage_info['latest_date']})")
+
+                        if len(stored_data) >= _storage.MAX_RETRIEVAL_LIMIT:
+                            st.warning(f"⚠️ Data limit reached for {project_key}. Showing partial data.")
+
                         all_data.extend(stored_data)
                         need_fresh_data = False
                 else:

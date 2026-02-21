@@ -1,6 +1,7 @@
 import os
 import re
 import hashlib
+import logging
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
@@ -10,6 +11,9 @@ from typing import Dict, List
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+    # Maximum number of records to retrieve to prevent resource exhaustion (DoS)
+    MAX_RETRIEVAL_LIMIT = 10000
+
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
         self.table_name = table_name
@@ -158,7 +162,11 @@ class AzureTableStorage:
             
             # Convert entities to list of dictionaries
             results = []
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                if i >= self.MAX_RETRIEVAL_LIMIT:
+                    logging.warning(f"Data retrieval limit reached ({self.MAX_RETRIEVAL_LIMIT} records). Showing partial data.")
+                    break
+
                 # Convert entity to dictionary and clean up Azure metadata
                 result = {}
                 for key, value in entity.items():
@@ -278,10 +286,16 @@ class AzureTableStorage:
                     )
 
                     projects = set()
+                    count = 0
                     for entity in entities:
+                        if count >= self.MAX_RETRIEVAL_LIMIT:
+                            logging.warning(f"Project metadata scan limit reached ({self.MAX_RETRIEVAL_LIMIT}). Some projects may be missing.")
+                            break
+
                         # Exclude the status marker
                         if entity.get('RowKey') != migration_rk and 'ProjectKey' in entity:
                             projects.add(entity['ProjectKey'])
+                            count += 1
                     return list(projects)
                 except Exception as e:
                     # If fast path fails, log warning and fall back to slow path
@@ -294,7 +308,13 @@ class AzureTableStorage:
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
+            count = 0
             for entity in entities:
+                if count >= self.MAX_RETRIEVAL_LIMIT:
+                    logging.warning(f"Project scan limit reached ({self.MAX_RETRIEVAL_LIMIT} entities scanned). Some projects may be missing.")
+                    break
+                count += 1
+
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
