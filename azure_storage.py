@@ -7,6 +7,9 @@ import streamlit as st
 import pandas as pd
 from typing import Dict, List
 
+# Maximum number of records to retrieve to prevent DoS/Resource Exhaustion
+MAX_RETRIEVAL_LIMIT = 10000
+
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
@@ -158,7 +161,12 @@ class AzureTableStorage:
             
             # Convert entities to list of dictionaries
             results = []
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Data retrieval limit ({MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
+                    break
+
                 # Convert entity to dictionary and clean up Azure metadata
                 result = {}
                 for key, value in entity.items():
@@ -294,7 +302,12 @@ class AzureTableStorage:
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved during scan
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Project scan limit ({MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
+                    break
+
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
