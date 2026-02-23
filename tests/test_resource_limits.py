@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
+# Import the module to patch the constant later
+import azure_storage
 from azure_storage import AzureTableStorage
 
 class TestResourceLimits(unittest.TestCase):
@@ -11,51 +13,48 @@ class TestResourceLimits(unittest.TestCase):
             mock_service_client.return_value.get_table_client.return_value = self.mock_table_client
             self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
-    def test_retrieve_metrics_data_limit(self):
-        """Test that retrieve_metrics_data does not fetch an unlimited number of records"""
+    @patch('azure_storage.MAX_RETRIEVAL_LIMIT', 10, create=True)
+    @patch('streamlit.warning')
+    def test_retrieve_metrics_limit(self, mock_warning):
+        """Test that retrieve_metrics_data stops after limit"""
+        # Create an iterator with 20 items
+        items = [{'PartitionKey': 'pk', 'RowKey': str(i), 'val': i} for i in range(20)]
+        self.mock_table_client.query_entities.return_value = iter(items)
 
-        # Create a generator that yields a large number of items
-        def massive_result_generator():
-            for i in range(20000): # Simulate 20k records
-                yield {
-                    "PartitionKey": "pk",
-                    "RowKey": f"rk_{i}",
-                    "ProjectKey": "p",
-                    "Branch": "b",
-                    "Date": "2025-01-01",
-                    "bugs": i
-                }
+        results = self.storage.retrieve_metrics_data('project_key')
 
-        # Mock query_entities to return the generator
-        self.mock_table_client.query_entities.return_value = massive_result_generator()
+        # Verify result length matches the limit
+        self.assertEqual(len(results), 10)
 
-        # Call retrieve_metrics_data
-        # It should now break after MAX_RETRIEVAL_LIMIT (10000)
-        results = self.storage.retrieve_metrics_data("p", "b", 30)
+        # Verify warning was called with appropriate message
+        found_limit_warning = False
+        for call in mock_warning.call_args_list:
+            if "limit" in call[0][0] and "truncated" in call[0][0]:
+                found_limit_warning = True
+                break
+        self.assertTrue(found_limit_warning, "Did not warn about truncated results")
 
-        self.assertEqual(len(results), self.storage.MAX_RETRIEVAL_LIMIT)
-
-    def test_get_stored_projects_limit(self):
-        """Test that get_stored_projects (slow path) enforces limit"""
-
-        # Mock exceptions to force slow path
+    @patch('azure_storage.MAX_RETRIEVAL_LIMIT', 10, create=True)
+    @patch('streamlit.warning')
+    def test_get_stored_projects_limit(self, mock_warning):
+        """Test that get_stored_projects stops after limit (slow path)"""
+        # Ensure fast path is skipped (missing metadata)
+        # The code catches Exception when getting MIGRATION_STATUS
         self.mock_table_client.get_entity.side_effect = Exception("Not found")
 
-        # Create generator for list_entities
-        def massive_project_generator():
-            for i in range(20000):
-                yield {
-                    "PartitionKey": "pk",
-                    "RowKey": f"rk_{i}",
-                    "ProjectKey": f"project_{i}"
-                }
-
-        self.mock_table_client.list_entities.return_value = massive_project_generator()
+        # Create an iterator with 20 items
+        items = [{'ProjectKey': f'proj_{i}'} for i in range(20)]
+        self.mock_table_client.list_entities.return_value = iter(items)
 
         projects = self.storage.get_stored_projects()
 
-        # Should be limited to MAX_RETRIEVAL_LIMIT
-        self.assertEqual(len(projects), self.storage.MAX_RETRIEVAL_LIMIT)
+        # Verify result length matches the limit
+        self.assertEqual(len(projects), 10)
 
-if __name__ == '__main__':
-    unittest.main()
+        # Verify warning was called with appropriate message
+        found_limit_warning = False
+        for call in mock_warning.call_args_list:
+            if "limit" in call[0][0] and "incomplete" in call[0][0]:
+                found_limit_warning = True
+                break
+        self.assertTrue(found_limit_warning, "Did not warn about incomplete project list")

@@ -38,6 +38,10 @@
 **Learning:** When using derived keys for uniqueness in a NoSQL store, ensure the derivation function is collision-resistant. Simple string replacement reduces entropy and causes collisions.
 **Prevention:** Use a cryptographic hash (SHA-256) of the original value as the key when the value contains invalid characters, ensuring both uniqueness and compliance with storage constraints.
 
+## 2026-03-04 - Unbounded Data Retrieval DoS
+**Vulnerability:** The `retrieve_metrics_data` method and fallback scan in `get_stored_projects` retrieved an unlimited number of records, allowing a potential Denial of Service (DoS) via resource exhaustion if the dataset grows significantly or if maliciously manipulated.
+**Learning:** Always assume the dataset can grow beyond memory limits. Iterators in client libraries (like `azure-data-tables`) will fetch all pages unless explicitly stopped.
+**Prevention:** Enforce a hard limit (`MAX_RETRIEVAL_LIMIT`) on the number of records processed/retrieved in loops, and warn the user if the limit is reached.
 ## 2026-03-04 - Azure Table Storage Resource Exhaustion (DoS)
 **Vulnerability:** The application retrieved an unlimited number of records in `retrieve_metrics_data` and `get_stored_projects`, potentially causing memory exhaustion (OOM) if the dataset grows large.
 **Learning:** Assuming data volume will remain small is a dangerous assumption. Always enforce upper bounds on data retrieval operations to protect application stability.
