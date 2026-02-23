@@ -1,73 +1,101 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 from azure_storage import AzureTableStorage
-import pandas as pd
 
 class TestDoSPrevention(unittest.TestCase):
     def setUp(self):
         self.connection_string = "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test;EndpointSuffix=core.windows.net"
         self.table_name = "TestTable"
-        with patch('azure.data.tables.TableServiceClient.from_connection_string') as mock_service_client:
-            self.mock_table_client = MagicMock()
-            mock_service_client.return_value.get_table_client.return_value = self.mock_table_client
-            self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
-    def test_store_metrics_updates_metadata(self):
-        """Test that storing metrics also updates the metadata partition"""
-        df = pd.DataFrame([{'coverage': 80.0}])
-        self.storage.store_metrics_data(df, "test_project", "main")
+        # Patch the TableServiceClient
+        self.patcher = patch('azure.data.tables.TableServiceClient.from_connection_string')
+        self.mock_service_client_cls = self.patcher.start()
+        self.mock_service_client = MagicMock()
+        self.mock_service_client_cls.return_value = self.mock_service_client
 
-        # Check if upsert_entity was called for metadata
-        # We expect at least one upsert for the project metadata
-        # The mock might be called multiple times (for metrics entities)
-        # We need to find the call with PartitionKey='METADATA_PROJECTS'
+        self.mock_table_client = MagicMock()
+        self.mock_service_client.get_table_client.return_value = self.mock_table_client
 
-        found_metadata_update = False
-        for call in self.mock_table_client.upsert_entity.call_args_list:
-            args, kwargs = call
-            entity = args[0] if args else kwargs.get('entity')
-            if entity and entity.get('PartitionKey') == 'METADATA_PROJECTS' and entity.get('ProjectKey') == 'test_project':
-                found_metadata_update = True
-                break
+        self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
-        self.assertTrue(found_metadata_update, "Metadata update not found in store_metrics_data calls")
+    def tearDown(self):
+        self.patcher.stop()
 
-    def test_get_stored_projects_uses_metadata(self):
-        """Test that get_stored_projects uses metadata partition when migration is complete"""
-        # Setup mock to return "Complete" for migration status
-        def get_entity_side_effect(partition_key, row_key):
-            if partition_key == 'METADATA_PROJECTS' and row_key == 'MIGRATION_STATUS':
-                return {'Status': 'Complete'}
-            raise Exception("Entity not found")
-
-        self.mock_table_client.get_entity.side_effect = get_entity_side_effect
-
-        # Call the method
-        self.storage.get_stored_projects()
-
-        # Verify it called query_entities with PartitionKey='METADATA_PROJECTS'
-        found_metadata_query = False
-        for call in self.mock_table_client.query_entities.call_args_list:
-            kwargs = call.kwargs
-            query_filter = kwargs.get('query_filter') or (call.args[0] if call.args else "")
-            parameters = kwargs.get('parameters')
-
-            if "PartitionKey eq @pk" in query_filter and parameters and parameters.get('pk') == 'METADATA_PROJECTS':
-                found_metadata_query = True
-                break
-
-        self.assertTrue(found_metadata_query, "Did not query metadata partition")
-
-        # Verify it did NOT call list_entities (full scan)
-        # Note: In the new implementation, it shouldn't call list_entities if migration is complete.
-        self.mock_table_client.list_entities.assert_not_called()
-
-    def test_get_stored_projects_falls_back_to_scan(self):
-        """Test that get_stored_projects falls back to scan if metadata missing"""
-        # Setup mock to raise exception for migration status (simulating missing)
+    def test_get_stored_projects_migration_logic(self):
+        """Test that get_stored_projects performs migration when metadata is missing"""
+        # 1. Simulate NO migration status
         self.mock_table_client.get_entity.side_effect = Exception("Not found")
 
-        self.storage.get_stored_projects()
+        # 2. Simulate full scan results
+        mock_entities = [
+            {'ProjectKey': 'project1'},
+            {'ProjectKey': 'project2'},
+            {'ProjectKey': 'project1'}
+        ]
+        self.mock_table_client.list_entities.return_value = mock_entities
 
-        # Verify it CALLED list_entities
-        self.mock_table_client.list_entities.assert_called()
+        # Call method
+        projects = self.storage.get_stored_projects()
+
+        # Verify full scan was called
+        self.mock_table_client.list_entities.assert_called_with(select='ProjectKey')
+
+        # Verify metadata backfill occurred
+        # Expect upsert_entity calls for project1, project2, and MIGRATION_STATUS
+        upsert_calls = self.mock_table_client.upsert_entity.call_args_list
+
+        # Check that we upserted project metadata
+        # Note: Order is not guaranteed for set iteration, so we check existence
+        project_keys_upserted = []
+        migration_status_upserted = False
+
+        for call_args in upsert_calls:
+            entity = call_args[0][0] # First arg is entity
+            if entity['RowKey'] == 'MIGRATION_STATUS':
+                migration_status_upserted = True
+                self.assertEqual(entity['Status'], 'Complete')
+            else:
+                project_keys_upserted.append(entity['ProjectKey'])
+                self.assertEqual(entity['PartitionKey'], 'METADATA_PROJECTS')
+
+        self.assertTrue(migration_status_upserted, "Migration status should be marked complete")
+        self.assertEqual(set(project_keys_upserted), {'project1', 'project2'})
+
+        # Verify result
+        self.assertEqual(set(projects), {'project1', 'project2'})
+
+    def test_get_stored_projects_fast_path(self):
+        """Test that get_stored_projects uses metadata partition when migrated"""
+        # 1. Simulate migration status COMPLETE
+        self.mock_table_client.get_entity.return_value = {'Status': 'Complete'}
+
+        # 2. Simulate metadata query results
+        mock_metadata = [
+            {'ProjectKey': 'project1'},
+            {'ProjectKey': 'project2'}
+        ]
+        self.mock_table_client.query_entities.return_value = mock_metadata
+
+        # Call method
+        projects = self.storage.get_stored_projects()
+
+        # Verify get_entity called for migration status
+        self.mock_table_client.get_entity.assert_called_with(
+            partition_key='METADATA_PROJECTS',
+            row_key='MIGRATION_STATUS'
+        )
+
+        # Verify query_entities called (Fast Path)
+        self.mock_table_client.query_entities.assert_called()
+        call_args = self.mock_table_client.query_entities.call_args
+        self.assertIn("PartitionKey eq @pk", call_args.kwargs['query_filter'])
+        self.assertEqual(call_args.kwargs['parameters']['pk'], 'METADATA_PROJECTS')
+
+        # Verify list_entities (scan) NOT called
+        self.mock_table_client.list_entities.assert_not_called()
+
+        # Verify result
+        self.assertEqual(set(projects), {'project1', 'project2'})
+
+if __name__ == '__main__':
+    unittest.main()

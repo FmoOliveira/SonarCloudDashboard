@@ -28,6 +28,10 @@
 **Learning:** Input validation must include length constraints imposed by the underlying storage system to prevent API failures and potential DoS vectors.
 **Prevention:** Enforce length limits on derived keys before attempting storage operations (e.g., raise `ValueError` if `len(key) > 1024`).
 
+## 2026-03-01 - Azure Table Storage Full Table Scan (DoS) - Part 2
+**Vulnerability:** Even with projection (`select='ProjectKey'`), `list_entities` performs a full table scan, which becomes a DoS vector as data grows (O(N) operation on every page load).
+**Learning:** Projection reduces bandwidth but does not optimize the query execution plan in NoSQL stores like Azure Table Storage. Queries without PartitionKey are always full scans.
+**Prevention:** Implement a "Metadata Partition" pattern: maintain a separate partition (e.g., `PartitionKey='METADATA_PROJECTS'`) that tracks unique project keys. Querying this partition is O(M) where M is number of projects, instead of O(N) where N is total records. Use lazy migration to populate it.
 ## 2026-03-02 - Azure Table Storage Metadata Partition (DoS Prevention)
 **Vulnerability:** The `get_stored_projects` method performed a full table scan (iterating all entities) even with projection, which scales linearly with data size and can lead to timeouts or resource exhaustion.
 **Learning:** Projection (`select`) reduces payload size but not the scan cost on the server side for finding entities. Primary keys (PartitionKey) must be used for efficient retrieval.
