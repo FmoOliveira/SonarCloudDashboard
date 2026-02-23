@@ -32,3 +32,33 @@
 **Vulnerability:** The `get_stored_projects` method relied on `list_entities` with a projection to fetch unique projects. While it reduced bandwidth, it still performed a full table scan, creating a DoS vector as data volume grew.
 **Learning:** In NoSQL stores like Azure Table Storage, projections do not prevent scanning. Efficient retrieval requires hitting a specific PartitionKey.
 **Prevention:** Maintained a dedicated `METADATA_PROJECTS` partition acting as an index. Implemented a read-through cache pattern with lazy migration (backfill) to populate it without downtime.
+## 2026-06-15 - Azure Table Storage Full Scan DoS Prevention
+**Vulnerability:** `get_stored_projects` performed a full table scan of millions of metrics records to list unique projects, leading to potential DoS.
+**Learning:** Even with projection (`select='ProjectKey'`), iterating over all entities in a large table is resource-intensive. NoSQL stores require explicit indexing strategies for unique value listing.
+**Prevention:** Implemented a "Metadata Partition" (`METADATA_PROJECTS`) acting as a read-through cache. It stores a list of unique projects separately. A lazy migration (backfill) mechanism ensures existing data is indexed on first access.
+## 2026-03-01 - Azure Table Storage Full Table Scan (DoS) - Part 2
+**Vulnerability:** Even with projection (`select='ProjectKey'`), `list_entities` performs a full table scan, which becomes a DoS vector as data grows (O(N) operation on every page load).
+**Learning:** Projection reduces bandwidth but does not optimize the query execution plan in NoSQL stores like Azure Table Storage. Queries without PartitionKey are always full scans.
+**Prevention:** Implement a "Metadata Partition" pattern: maintain a separate partition (e.g., `PartitionKey='METADATA_PROJECTS'`) that tracks unique project keys. Querying this partition is O(M) where M is number of projects, instead of O(N) where N is total records. Use lazy migration to populate it.
+## 2026-03-02 - Azure Table Storage Metadata Partition (DoS Prevention)
+**Vulnerability:** The `get_stored_projects` method performed a full table scan (iterating all entities) even with projection, which scales linearly with data size and can lead to timeouts or resource exhaustion.
+**Learning:** Projection (`select`) reduces payload size but not the scan cost on the server side for finding entities. Primary keys (PartitionKey) must be used for efficient retrieval.
+**Prevention:** Implement a "Metadata Partition" pattern: maintain a separate partition that indexes unique entities (projects), allowing O(1) or O(N_projects) retrieval instead of O(N_total_records).
+
+## 2026-03-03 - Azure Table Storage Metadata RowKey Collision
+**Vulnerability:** The `METADATA_PROJECTS` partition used a sanitized `ProjectKey` as its `RowKey`. Because sanitization (replacing `/` with `_`) is lossy, different project keys (e.g. `project/A` and `project_A`) resulted in the same `RowKey`, causing one to overwrite the other in the index.
+**Learning:** When using derived keys for uniqueness in a NoSQL store, ensure the derivation function is collision-resistant. Simple string replacement reduces entropy and causes collisions.
+**Prevention:** Use a cryptographic hash (SHA-256) of the original value as the key when the value contains invalid characters, ensuring both uniqueness and compliance with storage constraints.
+
+## 2026-03-04 - Unbounded Data Retrieval DoS
+**Vulnerability:** The `retrieve_metrics_data` method and fallback scan in `get_stored_projects` retrieved an unlimited number of records, allowing a potential Denial of Service (DoS) via resource exhaustion if the dataset grows significantly or if maliciously manipulated.
+**Learning:** Always assume the dataset can grow beyond memory limits. Iterators in client libraries (like `azure-data-tables`) will fetch all pages unless explicitly stopped.
+**Prevention:** Enforce a hard limit (`MAX_RETRIEVAL_LIMIT`) on the number of records processed/retrieved in loops, and warn the user if the limit is reached.
+## 2026-03-04 - Azure Table Storage Resource Exhaustion (DoS)
+**Vulnerability:** The application retrieved an unlimited number of records in `retrieve_metrics_data` and `get_stored_projects`, potentially causing memory exhaustion (OOM) if the dataset grows large.
+**Learning:** Assuming data volume will remain small is a dangerous assumption. Always enforce upper bounds on data retrieval operations to protect application stability.
+**Prevention:** Implement a hard limit (e.g., `MAX_RETRIEVAL_LIMIT`) on loops processing external data or database cursors, and warn/fail gracefully when the limit is reached.
+## 2026-03-04 - Azure Table Storage Excessive Data Exposure
+**Vulnerability:** The `retrieve_metrics_data` method retrieved all columns (properties) from Azure Table Storage entities, potentially exposing sensitive data if the schema changes or if malicious data is injected.
+**Learning:** Applications should follow the Principle of Least Privilege and Data Minimization by requesting only the data they need.
+**Prevention:** Use the `select` parameter in Azure Table Storage queries to explicitly whitelist the required columns.
