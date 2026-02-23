@@ -8,17 +8,19 @@ Built with [Streamlit](https://streamlit.io/) and integrated with Azure Table St
 ## 🚀 Overview
 
 SonarCloud Metrics Dashboard helps teams and developers gain insights into the health and quality of their codebases on [SonarCloud](https://sonarcloud.io).
-Track code coverage, vulnerabilities, bugs, and more—across multiple projects and branches—with powerful visualizations.
+Track code coverage, vulnerabilities, bugs, and more—across multiple projects and branches—with powerful visualizations. 
+
+This dashboard is styled using the **official Spotify-inspired Streamlit theme**, delivering a highly polished, responsive, and fully native dark mode experience without relying on messy CSS overrides.
 
 ---
 
 ## ✨ Features
 
-* **Interactive Dashboards**: Visualize code quality trends with line, bar, and box plot charts.
-* **Multi-Project Support**: Easily switch between projects and branches.
+* **Spotify-Inspired Aesthetic**: Clean, high-contrast dark mode with vibrant green accents.
+* **Interactive Dashboards**: Visualize code quality trends with line, bar, and box plot charts using a custom Plotly categorical color palette.
+* **Native Responsiveness**: Fully utilizes Streamlit's robust grid layout, ensuring seamless widget reflowing when the sidebar expands or on smaller screens.
 * **Historical Analysis**: Track metrics over customizable time periods (7, 30, 90, 180, 365 days).
 * **Azure Table Storage Integration**: Persist metrics for fast reloads and offline analysis.
-* **Data Export**: Download your filtered dashboard data as CSV.
 * **Customizable Metrics**: Select which code health KPIs to analyze.
 
 ---
@@ -69,7 +71,8 @@ AZURE_STORAGE_CONNECTION_STRING=your_azure_storage_connection_string
 streamlit run app.py
 ```
 
-Open the local Streamlit URL in your browser to use the dashboard.
+Open the local Streamlit URL in your browser to use the dashboard. 
+*Note: The theme is configured out-of-the-box via `.streamlit/config.toml`.*
 
 ---
 
@@ -88,7 +91,9 @@ Open the local Streamlit URL in your browser to use the dashboard.
 * `app.py` — Main Streamlit app and dashboard logic.
 * `sonarcloud_api.py` — Handles SonarCloud API integration.
 * `azure_storage.py` — Manages Azure Table Storage persistence.
-* `dashboard_components.py` — Visualization and dashboard UI components.
+* `dashboard_components.py` — Visualization and UI logic (metric widgets, configured Plotly layouts).
+* `ui_styles.py` — (Retired) Maintained as a no-op placeholder; global logic is now entirely handled natively by `config.toml`.
+* `.streamlit/config.toml` — The core nervous system of the app's aesthetic (the Spotify theme definitions).
 
 ---
 
@@ -111,10 +116,3 @@ Pull requests and issues are welcome! Please open an issue for bugs or feature r
 ## 📄 License
 
 [MIT License](LICENSE).
-
----
-
-## 🙏 Acknowledgments
-
-* Built with [Streamlit](https://streamlit.io/) and the [SonarCloud API](https://sonarcloud.io/web_api).
-
