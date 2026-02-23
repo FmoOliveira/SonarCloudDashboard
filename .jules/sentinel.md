@@ -66,3 +66,8 @@
 **Vulnerability:** The `retrieve_metrics_data` method retrieved all columns (properties) from Azure Table Storage entities, potentially exposing sensitive data if the schema changes or if malicious data is injected.
 **Learning:** Applications should follow the Principle of Least Privilege and Data Minimization by requesting only the data they need.
 **Prevention:** Use the `select` parameter in Azure Table Storage queries to explicitly whitelist the required columns.
+
+## 2025-02-17 - Azure Table Storage RowKey Collisions
+**Vulnerability:** Sanitization of RowKeys (replacing special chars with underscores) led to collisions where different project keys (e.g., `project/A` and `project#A`) mapped to the same RowKey (`project_A`), causing data overwrites in the metadata partition.
+**Learning:** Simple character replacement is insufficient for unique identifiers in storage systems with character constraints.
+**Prevention:** Use cryptographic hashes (SHA256) for RowKeys when the original key contains invalid characters, and store the original key as a separate property for retrieval.
