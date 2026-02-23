@@ -1,16 +1,27 @@
 import os
 import re
+import hashlib
+import logging
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
 import pandas as pd
 from typing import Dict, List
 
+# Maximum number of records to retrieve to prevent DoS/Resource Exhaustion
+MAX_RETRIEVAL_LIMIT = 10000
+
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+<<<<<<< sentinel-dos-metadata-partition-6756984226983363915
     METADATA_PARTITION_KEY = "METADATA_PROJECTS"
     MIGRATION_MARKER_ROW = "MIGRATION_STATUS"
+=======
+    # Constants for metadata partitioning
+    METADATA_PARTITION = "METADATA_PROJECTS"
+    MIGRATION_MARKER = "MIGRATION_STATUS"
+>>>>>>> main
 
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
@@ -25,25 +36,29 @@ class AzureTableStorage:
             # Table might already exist
             pass
     
+    def _sanitize_key(self, key: str) -> str:
+        """Sanitize key for Azure Table Storage"""
+        sanitized_key = key
+        for char in ['/', '\\', '#', '?']:
+            sanitized_key = sanitized_key.replace(char, '_')
+        sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+        return sanitized_key
+
     def _get_partition_key(self, project_key: str, branch: str = None) -> str:
         """Create a sanitized partition key from project and branch"""
         raw_key = f"{project_key}_{branch}" if branch else project_key
-
-        # Azure Table Storage invalid characters for PartitionKey:
-        # / \ # ? and control characters
-        # We replace them with an underscore to prevent errors
-        sanitized_key = raw_key
-        for char in ['/', '\\', '#', '?']:
-            sanitized_key = sanitized_key.replace(char, '_')
-
-        # Replace control characters with underscore using regex
-        # Control characters: \x00-\x1f and \x7f-\x9f
-        sanitized_key = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', sanitized_key)
+        sanitized_key = self._sanitize_key(raw_key)
 
         if len(sanitized_key) > 1024:
             raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
 
         return sanitized_key
+
+    def _get_metadata_row_key(self, project_key: str) -> str:
+        """Create a secure, collision-free row key for metadata partition using SHA256"""
+        # We use a hash to ensure unique project keys map to unique row keys
+        # regardless of special characters that might be sanitized away in a simple string replacement
+        return hashlib.sha256(project_key.encode('utf-8')).hexdigest()
 
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
         """Store metrics data in Azure Table Storage"""
@@ -110,7 +125,21 @@ class AzureTableStorage:
                     except Exception as batch_error:
                         st.error(f"Failed to store batch: {str(batch_error)}")
                         return False
+
+            # Update metadata partition
+            try:
+                # Sanitize RowKey to handle special characters in project_key
+                metadata_row_key = self._sanitize_key(project_key)
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": metadata_row_key,
+                    "ProjectKey": project_key,
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as e:
+                st.warning(f"Failed to update project metadata: {str(e)}")
             
+<<<<<<< sentinel-dos-metadata-partition-6756984226983363915
             # Also update the metadata partition for this project
             try:
                 metadata_entity = {
@@ -123,6 +152,19 @@ class AzureTableStorage:
             except Exception as e:
                 # Log but don't fail the main operation
                 st.warning(f"Failed to update metadata for project {project_key}: {str(e)}")
+=======
+            # Update metadata partition with project info
+            try:
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": project_key,
+                    "ProjectKey": project_key,
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as meta_error:
+                # Log but don't fail the whole operation if metadata update fails
+                st.warning(f"Failed to update project metadata: {str(meta_error)}")
+>>>>>>> main
 
             return True
             
@@ -149,11 +191,30 @@ class AzureTableStorage:
                 "start_date": start_date
             }
 
-            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
+            # Define allowed columns to prevent excessive data exposure
+            # We explicitly select only the metrics we need, plus identification fields
+            select_columns = [
+                'ProjectKey', 'Branch', 'Date',
+                'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
+                'vulnerabilities', 'security_rating', 'security_hotspots',
+                'security_review_rating', 'security_hotspots_reviewed', 'code_smells',
+                'sqale_rating', 'major_violations', 'minor_violations', 'violations'
+            ]
+
+            entities = self.table_client.query_entities(
+                query_filter=filter_query,
+                parameters=parameters,
+                select=select_columns
+            )
             
             # Convert entities to list of dictionaries
             results = []
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Data retrieval limit ({MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
+                    break
+
                 # Convert entity to dictionary and clean up Azure metadata
                 result = {}
                 for key, value in entity.items():
@@ -246,6 +307,7 @@ class AzureTableStorage:
             return {"has_coverage": False, "reason": f"Error checking coverage: {str(e)}"}
     
     def get_stored_projects(self) -> List[str]:
+<<<<<<< sentinel-dos-metadata-partition-6756984226983363915
         """Get list of projects stored in Azure Table Storage using metadata partition"""
         try:
             # First, check if migration is complete
@@ -266,10 +328,27 @@ class AzureTableStorage:
                     entities = self.table_client.query_entities(
                         query_filter="PartitionKey eq @pk",
                         parameters={"pk": self.METADATA_PARTITION_KEY},
+=======
+        """Get list of projects stored in Azure Table Storage using optimized metadata index"""
+        try:
+            # First, check if migration to metadata partition is complete
+            try:
+                migration_status = self.table_client.get_entity(
+                    partition_key=self.METADATA_PARTITION,
+                    row_key=self.MIGRATION_MARKER
+                )
+                if migration_status.get('Status') == 'Complete':
+                    # Migration complete, use metadata index (fast)
+                    # Query only the metadata partition
+                    metadata_entities = self.table_client.query_entities(
+                        query_filter="PartitionKey eq @pk",
+                        parameters={"pk": self.METADATA_PARTITION},
+>>>>>>> main
                         select=['RowKey']
                     )
 
                     projects = []
+<<<<<<< sentinel-dos-metadata-partition-6756984226983363915
                     for entity in entities:
                         if entity['RowKey'] != self.MIGRATION_MARKER_ROW:
                             projects.append(entity['RowKey'])
@@ -282,13 +361,33 @@ class AzureTableStorage:
 
             # Fallback: Full table scan and backfill metadata
             # This happens only once or if metadata is corrupted
+=======
+                    for entity in metadata_entities:
+                        # Exclude the marker entity itself
+                        if entity['RowKey'] != self.MIGRATION_MARKER:
+                            projects.append(entity['RowKey'])
+
+                    return projects
+            except Exception:
+                # Migration marker not found or other error, fallback to scan
+                pass
+
+            # Fallback: Full table scan (slow, but needed for initial migration)
+            # Query all entities using projection to fetch only ProjectKey
+>>>>>>> main
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved during scan
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Project scan limit ({MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
+                    break
+
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
+<<<<<<< sentinel-dos-metadata-partition-6756984226983363915
             # Backfill metadata
             if projects:
                 try:
@@ -311,6 +410,32 @@ class AzureTableStorage:
                     st.warning(f"Failed to backfill metadata: {str(e)}")
 
             return list(projects)
+=======
+            project_list = list(projects)
+
+            # Backfill metadata partition
+            try:
+                # Upsert all found projects to metadata partition
+                for project in project_list:
+                    self.table_client.upsert_entity({
+                        "PartitionKey": self.METADATA_PARTITION,
+                        "RowKey": project,
+                        "ProjectKey": project,
+                        "LastUpdated": datetime.now().isoformat()
+                    })
+
+                # Mark migration as complete
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": self.MIGRATION_MARKER,
+                    "Status": "Complete",
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as backfill_error:
+                st.warning(f"Metadata backfill failed: {str(backfill_error)}")
+
+            return project_list
+>>>>>>> main
             
         except Exception as e:
             st.warning(f"Failed to retrieve stored projects: {str(e)}")
