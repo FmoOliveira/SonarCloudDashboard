@@ -1,10 +1,15 @@
 import os
 import re
+import hashlib
+import logging
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
 import pandas as pd
 from typing import Dict, List
+
+# Maximum number of records to retrieve to prevent DoS/Resource Exhaustion
+MAX_RETRIEVAL_LIMIT = 10000
 
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
@@ -42,6 +47,12 @@ class AzureTableStorage:
             raise ValueError(f"PartitionKey exceeds 1024 characters: {len(sanitized_key)}")
 
         return sanitized_key
+
+    def _get_metadata_row_key(self, project_key: str) -> str:
+        """Create a secure, collision-free row key for metadata partition using SHA256"""
+        # We use a hash to ensure unique project keys map to unique row keys
+        # regardless of special characters that might be sanitized away in a simple string replacement
+        return hashlib.sha256(project_key.encode('utf-8')).hexdigest()
 
     def store_metrics_data(self, metrics_data: pd.DataFrame, project_key: str, branch: str = None) -> bool:
         """Store metrics data in Azure Table Storage"""
@@ -147,11 +158,30 @@ class AzureTableStorage:
                 "start_date": start_date
             }
 
-            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
+            # Define allowed columns to prevent excessive data exposure
+            # We explicitly select only the metrics we need, plus identification fields
+            select_columns = [
+                'ProjectKey', 'Branch', 'Date',
+                'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
+                'vulnerabilities', 'security_rating', 'security_hotspots',
+                'security_review_rating', 'security_hotspots_reviewed', 'code_smells',
+                'sqale_rating', 'major_violations', 'minor_violations', 'violations'
+            ]
+
+            entities = self.table_client.query_entities(
+                query_filter=filter_query,
+                parameters=parameters,
+                select=select_columns
+            )
             
             # Convert entities to list of dictionaries
             results = []
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Data retrieval limit ({MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
+                    break
+
                 # Convert entity to dictionary and clean up Azure metadata
                 result = {}
                 for key, value in entity.items():
@@ -244,7 +274,7 @@ class AzureTableStorage:
             return {"has_coverage": False, "reason": f"Error checking coverage: {str(e)}"}
     
     def get_stored_projects(self) -> List[str]:
-        """Get list of projects stored in Azure Table Storage"""
+        """Get list of projects stored in Azure Table Storage using metadata partition"""
         try:
             # Try to get from metadata partition first
             try:
@@ -281,11 +311,15 @@ class AzureTableStorage:
 
             # Fallback: Full scan
             # Query all entities using projection to fetch only ProjectKey
-            # This reduces bandwidth and prevents fetching unnecessary data (DoS mitigation)
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
             
-            for entity in entities:
+            for i, entity in enumerate(entities):
+                # Security check: Limit max records retrieved during scan
+                if i >= MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Project scan limit ({MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
+                    break
+
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
