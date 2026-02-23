@@ -37,3 +37,8 @@
 **Vulnerability:** The `METADATA_PROJECTS` partition used a sanitized `ProjectKey` as its `RowKey`. Because sanitization (replacing `/` with `_`) is lossy, different project keys (e.g. `project/A` and `project_A`) resulted in the same `RowKey`, causing one to overwrite the other in the index.
 **Learning:** When using derived keys for uniqueness in a NoSQL store, ensure the derivation function is collision-resistant. Simple string replacement reduces entropy and causes collisions.
 **Prevention:** Use a cryptographic hash (SHA-256) of the original value as the key when the value contains invalid characters, ensuring both uniqueness and compliance with storage constraints.
+
+## 2026-03-04 - Azure Table Storage Excessive Data Exposure
+**Vulnerability:** The `retrieve_metrics_data` method retrieved all columns (properties) from Azure Table Storage entities, potentially exposing sensitive data if the schema changes or if malicious data is injected.
+**Learning:** Applications should follow the Principle of Least Privilege and Data Minimization by requesting only the data they need.
+**Prevention:** Use the `select` parameter in Azure Table Storage queries to explicitly whitelist the required columns.
