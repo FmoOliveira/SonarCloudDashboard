@@ -52,21 +52,32 @@ class TestAzureStorageSecurity(unittest.TestCase):
         self.storage.delete_project_data(project_key, branch)
 
         self.mock_table_client.query_entities.assert_called()
-        call_args = self.mock_table_client.query_entities.call_args
 
-        query_filter = call_args.kwargs.get('query_filter')
-        if not query_filter and len(call_args[0]) > 0:
-            query_filter = call_args[0][0]
+        # Check the first call (main deletion query)
+        # Note: delete_project_data might make multiple calls (deletion then metadata cleanup)
+        # We need to find the one that corresponds to the deletion query
 
-        print(f"Delete Query: {query_filter}")
+        found_call = False
+        for call_args in self.mock_table_client.query_entities.call_args_list:
+            query_filter = call_args.kwargs.get('query_filter')
+            if not query_filter and len(call_args[0]) > 0:
+                query_filter = call_args[0][0]
 
-        # Assert placeholders
-        self.assertIn("@pk", query_filter)
+            # Check if this is the deletion query
+            if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
+                found_call = True
+                print(f"Delete Query: {query_filter}")
 
-        # Check parameters
-        parameters = call_args.kwargs.get('parameters')
-        self.assertIsNotNone(parameters)
-        self.assertEqual(parameters['pk'], f"{project_key}_{branch}")
+                # Assert placeholders
+                self.assertIn("@pk", query_filter)
+
+                # Check parameters
+                parameters = call_args.kwargs.get('parameters')
+                self.assertIsNotNone(parameters)
+                self.assertEqual(parameters['pk'], f"{project_key}_{branch}")
+                break
+
+        self.assertTrue(found_call, "Deletion query not found")
 
 if __name__ == '__main__':
     unittest.main()

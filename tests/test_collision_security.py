@@ -48,23 +48,29 @@ class TestAzureStorageCollisionSecurity(unittest.TestCase):
 
         self.storage.delete_project_data(project_key, branch)
 
-        call_args = self.mock_table_client.query_entities.call_args
-        query_filter = call_args.kwargs.get('query_filter')
-        if not query_filter and len(call_args[0]) > 0:
-            query_filter = call_args[0][0]
+        found_call = False
+        for call_args in self.mock_table_client.query_entities.call_args_list:
+            query_filter = call_args.kwargs.get('query_filter')
+            if not query_filter and len(call_args[0]) > 0:
+                query_filter = call_args[0][0]
 
-        parameters = call_args.kwargs.get('parameters')
+            if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
+                found_call = True
+                parameters = call_args.kwargs.get('parameters')
 
-        print(f"Delete Query: {query_filter}")
-        print(f"Parameters: {parameters}")
+                print(f"Delete Query: {query_filter}")
+                print(f"Parameters: {parameters}")
 
-        # Assert filters are present
-        self.assertIn("ProjectKey eq @project_key", query_filter)
-        self.assertIn("Branch eq @branch", query_filter)
+                # Assert filters are present
+                self.assertIn("ProjectKey eq @project_key", query_filter)
+                self.assertIn("Branch eq @branch", query_filter)
 
-        # Assert parameters are correct
-        self.assertEqual(parameters['project_key'], project_key)
-        self.assertEqual(parameters['branch'], branch)
+                # Assert parameters are correct
+                self.assertEqual(parameters['project_key'], project_key)
+                self.assertEqual(parameters['branch'], branch)
+                break
+
+        self.assertTrue(found_call, "Collision prevention query not found")
 
 if __name__ == '__main__':
     unittest.main()
