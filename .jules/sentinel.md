@@ -42,3 +42,7 @@
 **Vulnerability:** The application retrieved an unlimited number of records in `retrieve_metrics_data` and `get_stored_projects`, potentially causing memory exhaustion (OOM) if the dataset grows large.
 **Learning:** Assuming data volume will remain small is a dangerous assumption. Always enforce upper bounds on data retrieval operations to protect application stability.
 **Prevention:** Implement a hard limit (e.g., `MAX_RETRIEVAL_LIMIT`) on loops processing external data or database cursors, and warn/fail gracefully when the limit is reached.
+## 2026-03-04 - Azure Table Storage Excessive Data Exposure
+**Vulnerability:** The `retrieve_metrics_data` method retrieved all columns (properties) from Azure Table Storage entities, potentially exposing sensitive data if the schema changes or if malicious data is injected.
+**Learning:** Applications should follow the Principle of Least Privilege and Data Minimization by requesting only the data they need.
+**Prevention:** Use the `select` parameter in Azure Table Storage queries to explicitly whitelist the required columns.
