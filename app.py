@@ -8,6 +8,7 @@ from sonarcloud_api import SonarCloudAPI
 from dashboard_components import create_metric_card, create_trend_chart, create_comparison_chart
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
+from ui_styles import inject_custom_css
 
 load_dotenv()
 
@@ -41,6 +42,7 @@ def init_azure_storage():
 
 # Main app
 def main():
+    inject_custom_css()
     st.title("📊 SonarCloud Dashboard")
     #st.markdown("Monitor and analyze your organization's code quality metrics")
     

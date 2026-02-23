@@ -178,8 +178,8 @@ class AzureTableStorage:
             results = []
             for i, entity in enumerate(entities):
                 # Security check: Limit max records retrieved
-                if i >= MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Data retrieval limit ({MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
+                if i >= self.MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Data retrieval limit ({self.MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
                     break
 
                 # Convert entity to dictionary and clean up Azure metadata
@@ -309,8 +309,8 @@ class AzureTableStorage:
             
             for i, entity in enumerate(entities):
                 # Security check: Limit max records retrieved during scan
-                if i >= MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Project scan limit ({MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
+                if i >= self.MAX_RETRIEVAL_LIMIT:
+                    st.warning(f"Project scan limit ({self.MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
                     break
 
                 if 'ProjectKey' in entity:
