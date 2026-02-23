@@ -1,6 +1,7 @@
 import os
 import re
 import hashlib
+import logging
 from datetime import datetime
 from azure.data.tables import TableServiceClient
 import streamlit as st
@@ -13,6 +14,9 @@ MAX_RETRIEVAL_LIMIT = 10000
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+    # Maximum number of records to retrieve to prevent resource exhaustion (DoS)
+    MAX_RETRIEVAL_LIMIT = 10000
+
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
         self.table_name = table_name
@@ -157,7 +161,21 @@ class AzureTableStorage:
                 "start_date": start_date
             }
 
-            entities = self.table_client.query_entities(query_filter=filter_query, parameters=parameters)
+            # Define allowed columns to prevent excessive data exposure
+            # We explicitly select only the metrics we need, plus identification fields
+            select_columns = [
+                'ProjectKey', 'Branch', 'Date',
+                'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
+                'vulnerabilities', 'security_rating', 'security_hotspots',
+                'security_review_rating', 'security_hotspots_reviewed', 'code_smells',
+                'sqale_rating', 'major_violations', 'minor_violations', 'violations'
+            ]
+
+            entities = self.table_client.query_entities(
+                query_filter=filter_query,
+                parameters=parameters,
+                select=select_columns
+            )
             
             # Convert entities to list of dictionaries
             results = []
@@ -286,10 +304,16 @@ class AzureTableStorage:
                     )
 
                     projects = set()
+                    count = 0
                     for entity in entities:
+                        if count >= self.MAX_RETRIEVAL_LIMIT:
+                            logging.warning(f"Project metadata scan limit reached ({self.MAX_RETRIEVAL_LIMIT}). Some projects may be missing.")
+                            break
+
                         # Exclude the status marker
                         if entity.get('RowKey') != migration_rk and 'ProjectKey' in entity:
                             projects.add(entity['ProjectKey'])
+                            count += 1
                     return list(projects)
                 except Exception as e:
                     # If fast path fails, log warning and fall back to slow path
