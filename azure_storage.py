@@ -14,8 +14,9 @@ MAX_RETRIEVAL_LIMIT = 10000
 class AzureTableStorage:
     """Azure Table Storage client for storing SonarCloud metrics"""
     
+    # Constants for metadata partitioning
     METADATA_PARTITION = "METADATA_PROJECTS"
-    MIGRATION_MARKER_ROW = "MIGRATION_STATUS"
+    MIGRATION_MARKER = "MIGRATION_STATUS"
 
     def __init__(self, connection_string: str, table_name: str = "SonarCloudMetrics"):
         self.connection_string = connection_string
@@ -133,6 +134,18 @@ class AzureTableStorage:
             except Exception as e:
                 st.warning(f"Failed to update project metadata: {str(e)}")
             
+            # Update metadata partition with project info
+            try:
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": project_key,
+                    "ProjectKey": project_key,
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as meta_error:
+                # Log but don't fail the whole operation if metadata update fails
+                st.warning(f"Failed to update project metadata: {str(meta_error)}")
+
             return True
             
         except Exception as e:
@@ -274,42 +287,35 @@ class AzureTableStorage:
             return {"has_coverage": False, "reason": f"Error checking coverage: {str(e)}"}
     
     def get_stored_projects(self) -> List[str]:
-        """Get list of projects stored in Azure Table Storage using metadata partition"""
+        """Get list of projects stored in Azure Table Storage using optimized metadata index"""
         try:
-            # Try to get from metadata partition first
+            # First, check if migration to metadata partition is complete
             try:
-                # Check migration status
-                # We use query_entities because get_entity might raise ResourceNotFound which is slower to handle in some SDKs,
-                # but get_entity is cleaner. Let's use get_entity inside try/except.
-                try:
-                    status_entity = self.table_client.get_entity(
-                        partition_key=self.METADATA_PARTITION,
-                        row_key=self.MIGRATION_MARKER_ROW
-                    )
-                    is_complete = status_entity.get('Status') == 'Complete'
-                except Exception:
-                    is_complete = False
-
-                if is_complete:
-                    # Query all projects from metadata partition
-                    entities = self.table_client.query_entities(
+                migration_status = self.table_client.get_entity(
+                    partition_key=self.METADATA_PARTITION,
+                    row_key=self.MIGRATION_MARKER
+                )
+                if migration_status.get('Status') == 'Complete':
+                    # Migration complete, use metadata index (fast)
+                    # Query only the metadata partition
+                    metadata_entities = self.table_client.query_entities(
                         query_filter="PartitionKey eq @pk",
                         parameters={"pk": self.METADATA_PARTITION},
-                        select=["ProjectKey", "RowKey"]
+                        select=['RowKey']
                     )
 
                     projects = []
-                    for entity in entities:
-                        if entity['RowKey'] != self.MIGRATION_MARKER_ROW and 'ProjectKey' in entity:
-                            projects.append(entity['ProjectKey'])
+                    for entity in metadata_entities:
+                        # Exclude the marker entity itself
+                        if entity['RowKey'] != self.MIGRATION_MARKER:
+                            projects.append(entity['RowKey'])
 
-                    if projects:
-                        return sorted(list(set(projects)))
+                    return projects
             except Exception:
-                # Metadata access failed, fall back to scan
+                # Migration marker not found or other error, fallback to scan
                 pass
 
-            # Fallback: Full scan
+            # Fallback: Full table scan (slow, but needed for initial migration)
             # Query all entities using projection to fetch only ProjectKey
             entities = self.table_client.list_entities(select='ProjectKey')
             projects = set()
@@ -323,32 +329,30 @@ class AzureTableStorage:
                 if 'ProjectKey' in entity:
                     projects.add(entity['ProjectKey'])
             
-            # Backfill metadata
-            if projects:
-                for project_key in projects:
-                    try:
-                        metadata_row_key = self._sanitize_key(project_key)
-                        self.table_client.upsert_entity({
-                            "PartitionKey": self.METADATA_PARTITION,
-                            "RowKey": metadata_row_key,
-                            "ProjectKey": project_key,
-                            "LastUpdated": datetime.now().isoformat()
-                        })
-                    except Exception:
-                        pass
+            project_list = list(projects)
 
-                # Mark migration as complete
-                try:
+            # Backfill metadata partition
+            try:
+                # Upsert all found projects to metadata partition
+                for project in project_list:
                     self.table_client.upsert_entity({
                         "PartitionKey": self.METADATA_PARTITION,
-                        "RowKey": self.MIGRATION_MARKER_ROW,
-                        "Status": "Complete",
+                        "RowKey": project,
+                        "ProjectKey": project,
                         "LastUpdated": datetime.now().isoformat()
                     })
-                except Exception:
-                    pass
 
-            return list(projects)
+                # Mark migration as complete
+                self.table_client.upsert_entity({
+                    "PartitionKey": self.METADATA_PARTITION,
+                    "RowKey": self.MIGRATION_MARKER,
+                    "Status": "Complete",
+                    "LastUpdated": datetime.now().isoformat()
+                })
+            except Exception as backfill_error:
+                st.warning(f"Metadata backfill failed: {str(backfill_error)}")
+
+            return project_list
             
         except Exception as e:
             st.warning(f"Failed to retrieve stored projects: {str(e)}")
