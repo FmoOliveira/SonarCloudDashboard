@@ -49,12 +49,26 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon: str):
-    """Create a metric card with title, value, and icon"""
-    st.metric(
-        label=f"{icon} {title}",
-        value=value
-    )
+def create_metric_card(title: str, value: str, icon_class: str):
+    """Create a metric card with title, value, and Iconoir icon"""
+    html = f"""
+    <div style="
+        background-color: #121212;
+        border: 1px solid #7c7c7c;
+        border-radius: 0.3rem;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+    ">
+        <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="{icon_class}" style="font-size: 1.2rem; color: #1ed760;"></i>
+            <span>{title}</span>
+        </div>
+        <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
+            {value}
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
     """Create a line chart showing metric trends over time"""

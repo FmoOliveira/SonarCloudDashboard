@@ -43,7 +43,8 @@ def init_azure_storage():
 # Main app
 def main():
     inject_custom_css()
-    st.title("📊 SonarCloud Dashboard")
+    st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
+    st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     #st.markdown("Monitor and analyze your organization's code quality metrics")
     
     # Initialize API and storage
@@ -52,13 +53,13 @@ def main():
     
     # Sidebar for controls
     with st.sidebar:
-        st.header("🔧 Controls")
+        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-wrench"></i> Controls</h2>', unsafe_allow_html=True)
         
        
         organization = os.getenv("SONARCLOUD_ORG", "organization_key")
         
         # Date range selection
-        st.subheader("📅 Date Range")
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-calendar"></i> Date Range</h3>', unsafe_allow_html=True)
         date_range = st.selectbox(
             "Select time period",
             ["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year"]
@@ -85,7 +86,7 @@ def main():
     
     # Project selection
     with st.sidebar:
-        st.subheader("🏗️ Project Selection")
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-building"></i> Project Selection</h3>', unsafe_allow_html=True)
         selected_project = st.selectbox(
             "Select a project to analyze",
             options=[p['key'] for p in projects],
@@ -100,7 +101,7 @@ def main():
         project_branches = fetch_project_branches(api, selected_project)
         
         # Branch filter with actual branches from the selected project
-        st.subheader("🌿 Branch Filter")
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-git-branch"></i> Branch Filter</h3>', unsafe_allow_html=True)
         if project_branches:
             branch_options = [b.get('name', 'Unknown') for b in project_branches]
             branch_filter = st.selectbox(
@@ -122,20 +123,20 @@ def main():
                 st.stop()
         
         # Execute Filter Button
-        st.subheader("🔍 Execute Analysis")
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-search"></i> Execute Analysis</h3>', unsafe_allow_html=True)
         execute_analysis = st.button(
-            "📊 Load Data & Show Dashboard", 
+            "Load Data & Show Dashboard", 
             type="primary",
             help="Click to load data with selected filters and display dashboard",
             use_container_width=True
         )
         
         # Data Management Section (moved to bottom)
-        st.subheader("💾 Data Management")
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-database-script"></i> Data Management</h3>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔄 Refresh Data", help="Clear cache and fetch fresh data from SonarCloud"):
+            if st.button("Refresh Data", help="Clear cache and fetch fresh data from SonarCloud"):
                 st.cache_data.clear()
                 st.rerun()
         
@@ -143,9 +144,9 @@ def main():
             stored_projects = []
             try:
                 stored_projects = storage.get_stored_projects()
-                st.info(f"📊 {len(stored_projects)} projects in storage")
+                st.info(f"{len(stored_projects)} projects in storage")
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"⚠️ Project limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+                    st.warning(f"Project limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
             except Exception as e:
                 st.warning(f"Storage status unavailable: {str(e)}")
     
@@ -166,23 +167,23 @@ def main():
             st.write(f"Total records: {len(metrics_data)}")
             st.write(f"Date range: {metrics_data['date'].min()} to {metrics_data['date'].max()}")
             st.write(f"Unique dates: {metrics_data['date'].nunique()}")
-            st.info("📊 Data has been aggregated by date - multiple records per day are averaged")
+            st.info("Data has been aggregated by date - multiple records per day are averaged")
             st.dataframe(metrics_data.head())
         # Show active filters
         project_name = next((p['name'] for p in projects if p['key'] == selected_project), selected_project)
-        st.info(f"📊 Analyzing project: **{project_name}**")
+        st.info(f"Analyzing project: **{project_name}**")
         if branch_filter:
-            st.info(f"📋 Showing data for branch: **{branch_filter}**")
+            st.info(f"Showing data for branch: **{branch_filter}**")
     # Main dashboard content
     if not metrics_data.empty:
         display_dashboard(metrics_data, [selected_project], projects, execute_analysis, branch_filter)
     else:
         # Show instructions when no analysis is executed
-        st.info("👈 Select your filters in the sidebar and click 'Load Data & Show Dashboard' to begin analysis.")
+        st.info("Select your filters in the sidebar and click 'Load Data & Show Dashboard' to begin analysis.")
         
         # Show summary of available options
         if projects:
-            st.subheader("📋 Available Projects")
+            st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Available Projects</h3>', unsafe_allow_html=True)
             project_list = [f"- **{p['name']}** (`{p['key']}`)" for p in projects[:10]]
             if len(projects) > 10:
                 project_list.append(f"- ... and **{len(projects) - 10}** more projects")
@@ -229,15 +230,15 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                     # Optimization: Use data pre-fetched during coverage check to avoid redundant DB call
                     stored_data = coverage_info.get("data", [])
                     if stored_data:
-                        st.info(f"✅ Using {coverage_info['record_count']} stored records for {project_key} (latest: {coverage_info['latest_date']})")
+                        st.info(f"Using {coverage_info['record_count']} stored records for {project_key} (latest: {coverage_info['latest_date']})")
 
                         if len(stored_data) >= _storage.MAX_RETRIEVAL_LIMIT:
-                            st.warning(f"⚠️ Data limit reached for {project_key}. Showing partial data.")
+                            st.warning(f"Data limit reached for {project_key}. Showing partial data.")
 
                         all_data.extend(stored_data)
                         need_fresh_data = False
                 else:
-                    st.info(f"📅 {coverage_info['reason']} - fetching fresh data for {project_key}")
+                    st.info(f"{coverage_info['reason']} - fetching fresh data for {project_key}")
                     
             except Exception as e:
                 st.warning(f"Could not check stored data coverage for {project_key}: {str(e)}")
@@ -259,7 +260,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                             df_to_store['project_key'] = project_key
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
-                                st.success(f"📊 Stored {len(history)} new records for {project_key}")
+                                st.success(f"Stored {len(history)} new records for {project_key}")
                         except Exception as e:
                             st.warning(f"Could not store data for {project_key}: {str(e)}")
                 
@@ -277,7 +278,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                                 df_to_store = pd.DataFrame([measures])
                                 success = _storage.store_metrics_data(df_to_store, project_key, branch)
                                 if success:
-                                    st.success(f"📊 Stored current measures for {project_key}")
+                                    st.success(f"Stored current measures for {project_key}")
                             except Exception as e:
                                 st.warning(f"Could not store current measures for {project_key}: {str(e)}")
                         
@@ -336,33 +337,33 @@ def display_dashboard(df, selected_projects, all_projects, execute_analysis, bra
     project_names = {p['key']: p['name'] for p in all_projects}
     
     # Overview metrics
-    st.header("📈 Overview")
+    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
     
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         total_vulnerabilities = df['vulnerabilities'].fillna(0).astype(int).sum() if 'vulnerabilities' in df.columns else 0
-        create_metric_card("Sum of Vulnerabilities", str(total_vulnerabilities), "🛡️")
+        create_metric_card("Sum of Vulnerabilities", str(total_vulnerabilities), "iconoir-shield-warning")
     
     with col2:
         total_security_hotspots = df['security_hotspots'].fillna(0).astype(int).sum() if 'security_hotspots' in df.columns else 0
-        create_metric_card("Sum of Security Hotspots", str(total_security_hotspots), "🔥")
+        create_metric_card("Sum of Security Hotspots", str(total_security_hotspots), "iconoir-fire-flame")
     
     with col3:
         sum_duplicated_density = df['duplicated_lines_density'].fillna(0).astype(float).sum() if 'duplicated_lines_density' in df.columns else 0
-        create_metric_card("Sum of Duplicated Lines Density", f"{sum_duplicated_density:.1f}%", "📋")
+        create_metric_card("Sum of Duplicated Lines Density", f"{sum_duplicated_density:.1f}%", "iconoir-page")
     
     with col4:
         avg_security_rating = df['security_rating'].fillna(0).astype(float).mean() if 'security_rating' in df.columns else 0
-        create_metric_card("Average Security Rating", f"{avg_security_rating:.1f}", "🔒")
+        create_metric_card("Average Security Rating", f"{avg_security_rating:.1f}", "iconoir-lock")
     
     with col5:
         avg_reliability_rating = df['reliability_rating'].fillna(0).astype(float).mean() if 'reliability_rating' in df.columns else 0
-        create_metric_card("Average Reliability Rating", f"{avg_reliability_rating:.1f}", "⚡")
+        create_metric_card("Average Reliability Rating", f"{avg_reliability_rating:.1f}", "iconoir-flash")
     
     # Detailed metrics charts
-    st.header("📊 Detailed Metrics")
+    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
     
     # Metrics selection
     available_metrics = [
@@ -422,7 +423,7 @@ def display_dashboard(df, selected_projects, all_projects, execute_analysis, bra
             create_multi_metric_chart(df, confirmed_metrics, project_names, chart_type)
     
     # Project comparison table
-    st.header("📋 Metric Details")
+    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Metric Details</h2>', unsafe_allow_html=True)
     
     if not df.empty:
         # Prepare data for display - show all historical data, not just latest
@@ -467,7 +468,7 @@ def display_dashboard(df, selected_projects, all_projects, execute_analysis, bra
         # Export functionality
         csv = display_data.to_csv(index=False)
         st.download_button(
-            label="📥 Download as CSV",
+            label="Download as CSV",
             data=csv,
             file_name=f"sonarcloud_metrics_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
