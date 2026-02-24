@@ -9,9 +9,19 @@ from dashboard_components import create_metric_card, create_trend_chart, create_
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
 from ui_styles import inject_custom_css
+import asyncio
+import aiohttp
+from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception, RetryCallState
 
 load_dotenv()
 
+def load_css(file_name: str) -> None:
+    """Reads a CSS file and injects it into the Streamlit DOM."""
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    else:
+        st.warning(f"CSS file not found: {file_name}")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -43,6 +53,7 @@ def init_azure_storage():
 # Main app
 def main():
     inject_custom_css()
+    load_css("styles.css")
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
     st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     #st.markdown("Monitor and analyze your organization's code quality metrics")
@@ -132,51 +143,56 @@ def main():
         )
         
         # Data Management Section (moved to bottom)
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-database-script"></i> Data Management</h3>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
+        st.markdown('<br><h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;"><i class="iconoir-database-script"></i> Data Management</h3>', unsafe_allow_html=True)
         
-        with col1:
-            if st.button("Refresh Data", help="Clear cache and fetch fresh data from SonarCloud"):
-                st.cache_data.clear()
-                st.rerun()
-        
-        with col2:
-            stored_projects = []
-            try:
+        if st.button("Refresh Data", help="Clear cache and fetch fresh data from SonarCloud", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+            
+        try:
+            if storage:
                 stored_projects = storage.get_stored_projects()
-                st.info(f"{len(stored_projects)} projects in storage")
+                st.caption(f"**{len(stored_projects)}** projects in Azure Storage.")
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Project limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
-            except Exception as e:
-                st.warning(f"Storage status unavailable: {str(e)}")
+                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+        except Exception as e:
+            st.caption(f"Storage unavailable: {str(e)}")
     
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
         # Fetch metrics for selected project
-        with st.spinner("Loading metrics data..."):
+        with st.status("Fetching telemetry from SonarCloud...", expanded=True) as status:
             metrics_data = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
-        if metrics_data.empty:
-            st.error("No metrics data available for the selected project and time period.")
-            st.stop()
+            if metrics_data.empty:
+                status.update(label="No metrics data available.", state="error", expanded=False)
+                st.stop()
+            status.update(label="Data successfully loaded!", state="complete", expanded=False)
         st.session_state['metrics_data'] = metrics_data
+        st.session_state['data_project'] = selected_project
+        st.session_state['data_branch'] = branch_filter
+        
     # Use cached metrics_data if available
     metrics_data = st.session_state.get('metrics_data', pd.DataFrame())
-    if not metrics_data.empty and execute_analysis:
-        # Debug: Show data info
+    
+    if not metrics_data.empty:
+        # Main dashboard content
+        data_project = st.session_state.get('data_project', selected_project)
+        data_branch = st.session_state.get('data_branch', branch_filter)
+        project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
+        
+        # Single consolidated info block
+        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**")
+        
+        display_dashboard(metrics_data, [data_project], projects, data_branch)
+        
+        # Debug: Show data info at the bottom
+        st.markdown('---')
         with st.expander("Debug: Data Info"):
             st.write(f"Total records: {len(metrics_data)}")
             st.write(f"Date range: {metrics_data['date'].min()} to {metrics_data['date'].max()}")
             st.write(f"Unique dates: {metrics_data['date'].nunique()}")
-            st.info("Data has been aggregated by date - multiple records per day are averaged")
+            st.caption("Data has been aggregated by date - multiple records per day are averaged")
             st.dataframe(metrics_data.head())
-        # Show active filters
-        project_name = next((p['name'] for p in projects if p['key'] == selected_project), selected_project)
-        st.info(f"Analyzing project: **{project_name}**")
-        if branch_filter:
-            st.info(f"Showing data for branch: **{branch_filter}**")
-    # Main dashboard content
-    if not metrics_data.empty:
-        display_dashboard(metrics_data, [selected_project], projects, execute_analysis, branch_filter)
     else:
         # Show instructions when no analysis is executed
         st.info("Select your filters in the sidebar and click 'Load Data & Show Dashboard' to begin analysis.")
@@ -207,18 +223,87 @@ def fetch_project_branches(_api, project_key):
         st.warning(f"Could not fetch branches for {project_key}: {str(e)}")
         return []
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+def should_retry_api_call(retry_state: RetryCallState) -> bool:
+    if not retry_state.outcome.failed:
+        return False
+    exc = retry_state.outcome.exception()
+    if isinstance(exc, aiohttp.ClientResponseError):
+        return exc.status in [429, 500, 502, 503, 504]
+    if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
+        return True
+    return False
+
+@retry(
+    wait=wait_exponential_jitter(initial=2, max=15), 
+    stop=stop_after_attempt(5),
+    retry=retry_if_exception(should_retry_api_call),
+    reraise=True
+)
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+    url = "https://sonarcloud.io/api/measures/search_history"
+    start_date = datetime.now() - timedelta(days=days)
+    end_date = datetime.now()
+    
+    metrics = [
+        'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
+        'vulnerabilities', 'security_rating', 'security_hotspots', 'security_review_rating',
+        'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
+        'minor_violations', 'violations'
+    ]
+    params = {
+        "component": project_key,
+        "metrics": ",".join(metrics),
+        "from": start_date.strftime('%Y-%m-%d'),
+        "to": end_date.strftime('%Y-%m-%d'),
+        "ps": 1000
+    }
+    if branch and branch.strip():
+        params["branch"] = branch.strip()
+        
+    headers = {"Authorization": f"Bearer {token}"}
+    call_timeout = aiohttp.ClientTimeout(total=15, connect=5)
+    
+    async with session.get(url, params=params, headers=headers, timeout=call_timeout) as response:
+        response.raise_for_status()
+        data = await response.json()
+        
+        history = []
+        if 'measures' in data:
+            for measure in data['measures']:
+                metric_name = measure['metric']
+                for hist_item in measure.get('history', []):
+                    date_val = hist_item.get('date')
+                    value = hist_item.get('value')
+                    
+                    if date_val and value is not None:
+                        record = next((r for r in history if r['date'] == date_val), None)
+                        if not record:
+                            record = {'date': date_val, 'project_key': project_key}
+                            if branch:
+                                record['branch'] = branch
+                            history.append(record)
+                        
+                        if metric_name in ['coverage', 'duplicated_lines_density']:
+                            record[metric_name] = float(value)
+                        else:
+                            record[metric_name] = int(float(value)) if '.' in value else int(value)
+                            
+        return history
+
+async def _fetch_all_projects_history(project_keys: list, token: str, days: int, branch: str) -> dict:
+    connector = aiohttp.TCPConnector(limit_per_host=5)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = [fetch_sonar_history_async(session, pk, token, days, branch) for pk in project_keys]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return dict(zip(project_keys, results))
+
+@st.cache_data(ttl=300, show_spinner=False)  # Cache for 5 minutes
 def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
     """Fetch metrics data for selected projects with Azure Table Storage integration"""
     all_data = []
+    projects_to_fetch = []
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for i, project_key in enumerate(project_keys):
-        status_text.text(f"Fetching data for {project_key}...")
-        
-        # First check if we have sufficient data coverage in Azure Table Storage
+    for project_key in project_keys:
         need_fresh_data = True
         
         if _storage:
@@ -226,69 +311,52 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                 coverage_info = _storage.check_data_coverage(project_key, branch, days)
                 
                 if coverage_info["has_coverage"]:
-                    # We have sufficient data coverage, use stored data
-                    # Optimization: Use data pre-fetched during coverage check to avoid redundant DB call
                     stored_data = coverage_info.get("data", [])
                     if stored_data:
-                        st.info(f"Using {coverage_info['record_count']} stored records for {project_key} (latest: {coverage_info['latest_date']})")
-
-                        if len(stored_data) >= _storage.MAX_RETRIEVAL_LIMIT:
-                            st.warning(f"Data limit reached for {project_key}. Showing partial data.")
-
+                        st.toast(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})", icon="📦")
                         all_data.extend(stored_data)
                         need_fresh_data = False
                 else:
-                    st.info(f"{coverage_info['reason']} - fetching fresh data for {project_key}")
+                    st.toast(f"Fetching fresh data for {project_key}...", icon="🔄")
                     
             except Exception as e:
-                st.warning(f"Could not check stored data coverage for {project_key}: {str(e)}")
+                st.toast(f"Storage check failed for {project_key}: {str(e)}", icon="⚠️")
         
-        # If no sufficient stored data or storage is not available, fetch from SonarCloud API
         if need_fresh_data:
-            try:
-                # Get historical data first (this is the main data for time series)
-                history = _api.get_project_history(project_key, days, branch)
-                if history:
-                    for record in history:
-                        record['project_key'] = project_key
-                        all_data.append(record)
-                    
-                    # Store the fetched data in Azure Table Storage
-                    if _storage and history:
+             projects_to_fetch.append(project_key)
+    
+    if projects_to_fetch:
+        token = os.getenv("SONARCLOUD_TOKEN", "")
+        raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
+        
+        for project_key, result in raw_results.items():
+            if isinstance(result, Exception):
+                st.error(f"Failed to fetch {project_key}: {str(result)}")
+            else:
+                if result:
+                    for r in result:
+                        all_data.append(r)
+                    if _storage:
                         try:
-                            df_to_store = pd.DataFrame(history)
-                            df_to_store['project_key'] = project_key
+                            df_to_store = pd.DataFrame(result)
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
-                                st.success(f"Stored {len(history)} new records for {project_key}")
+                                st.toast(f"Stored {len(result)} new records for {project_key}", icon="✅")
                         except Exception as e:
-                            st.warning(f"Could not store data for {project_key}: {str(e)}")
-                
-                # Only get current measures if no historical data is available
-                if not history:
-                    measures = _api.get_project_measures(project_key, branch)
-                    if measures:
-                        measures['project_key'] = project_key
-                        measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')
-                        all_data.append(measures)
-                        
-                        # Store current measures if no history available
-                        if _storage:
-                            try:
+                            st.toast(f"Could not store data for {project_key}: {str(e)}", icon="⚠️")
+                else:
+                    # Fallback to current measures if historical yields no data
+                    try:
+                        measures = _api.get_project_measures(project_key, branch)
+                        if measures:
+                            measures['project_key'] = project_key
+                            measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')
+                            all_data.append(measures)
+                            if _storage:
                                 df_to_store = pd.DataFrame([measures])
-                                success = _storage.store_metrics_data(df_to_store, project_key, branch)
-                                if success:
-                                    st.success(f"Stored current measures for {project_key}")
-                            except Exception as e:
-                                st.warning(f"Could not store current measures for {project_key}: {str(e)}")
-                        
-            except Exception as e:
-                st.warning(f"Could not fetch data for {project_key}: {str(e)}")
-        
-        progress_bar.progress((i + 1) / len(project_keys))
-    
-    progress_bar.empty()
-    status_text.empty()
+                                _storage.store_metrics_data(df_to_store, project_key, branch)
+                    except Exception as e:
+                        st.error(f"Fallback fetch failed for {project_key}: {str(e)}")
     
     df = pd.DataFrame(all_data)
     
@@ -330,7 +398,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
     
     return df if all_data else pd.DataFrame()
 
-def display_dashboard(df, selected_projects, all_projects, execute_analysis, branch_filter=None):
+def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
     
     # Get project names mapping
@@ -344,23 +412,23 @@ def display_dashboard(df, selected_projects, all_projects, execute_analysis, bra
     
     with col1:
         total_vulnerabilities = df['vulnerabilities'].fillna(0).astype(int).sum() if 'vulnerabilities' in df.columns else 0
-        create_metric_card("Sum of Vulnerabilities", str(total_vulnerabilities), "iconoir-shield-warning")
+        create_metric_card("Vulnerabilities", str(total_vulnerabilities), "iconoir-shield-warning")
     
     with col2:
         total_security_hotspots = df['security_hotspots'].fillna(0).astype(int).sum() if 'security_hotspots' in df.columns else 0
-        create_metric_card("Sum of Security Hotspots", str(total_security_hotspots), "iconoir-fire-flame")
+        create_metric_card("Security Hotspots", str(total_security_hotspots), "iconoir-fire-flame")
     
     with col3:
         sum_duplicated_density = df['duplicated_lines_density'].fillna(0).astype(float).sum() if 'duplicated_lines_density' in df.columns else 0
-        create_metric_card("Sum of Duplicated Lines Density", f"{sum_duplicated_density:.1f}%", "iconoir-page")
+        create_metric_card("Duplicated Lines", f"{sum_duplicated_density:.1f}%", "iconoir-page")
     
     with col4:
         avg_security_rating = df['security_rating'].fillna(0).astype(float).mean() if 'security_rating' in df.columns else 0
-        create_metric_card("Average Security Rating", f"{avg_security_rating:.1f}", "iconoir-lock")
+        create_metric_card("Security Rating", f"{avg_security_rating:.1f}", "iconoir-lock")
     
     with col5:
         avg_reliability_rating = df['reliability_rating'].fillna(0).astype(float).mean() if 'reliability_rating' in df.columns else 0
-        create_metric_card("Average Reliability Rating", f"{avg_reliability_rating:.1f}", "iconoir-flash")
+        create_metric_card("Reliability Rating", f"{avg_reliability_rating:.1f}", "iconoir-flash")
     
     # Detailed metrics charts
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
@@ -378,36 +446,27 @@ def display_dashboard(df, selected_projects, all_projects, execute_analysis, bra
 
     with col1:
         # Pre-selected key metrics
-        key_metrics = ['vulnerabilities', 'security_hotspots', 'duplicated_lines_density', 
-                      'bugs', 'security_rating', 'reliability_rating']
+        key_metrics = ['vulnerabilities', 'security_rating'] # Constricted to two KPIs
         default_metrics = [m for m in key_metrics if m in available_metrics]
+        
         if 'selected_metrics' not in st.session_state:
             st.session_state['selected_metrics'] = default_metrics
-        if 'temp_selected_metrics' not in st.session_state:
-            st.session_state['temp_selected_metrics'] = st.session_state['selected_metrics']
-        # Use a callback to update selected_metrics without triggering a refresh
-        def update_selected_metrics():
-            st.session_state['selected_metrics'] = st.session_state['temp_selected_metrics']
+            
         st.multiselect(
             "Select metrics to visualize",
             available_metrics,
-            key="temp_selected_metrics",
-            on_change=update_selected_metrics
+            key="selected_metrics"
         )
-        st.caption("Changing metrics here will not update the dashboard until you click 'Load Data & Show Dashboard'.")
 
     with col2:
         chart_type = st.selectbox(
             "Chart type",
             ["Line Chart", "Bar Chart", "Box Plot"]
         )
+    st.markdown("</div>", unsafe_allow_html=True) # Ending expander conceptually if html, but we'll use Streamlit native expander by wrapping it
 
-    # Only update dashboard when button is clicked
-    if 'confirmed_metrics' not in st.session_state:
-        st.session_state['confirmed_metrics'] = st.session_state['selected_metrics']
-    if execute_analysis:
-        st.session_state['confirmed_metrics'] = st.session_state['selected_metrics']
-    confirmed_metrics = st.session_state['confirmed_metrics']
+    # Decoupled visualization update: directly use the selected metrics
+    confirmed_metrics = st.session_state.get('selected_metrics', [])
     if confirmed_metrics and not df.empty:
         if len(confirmed_metrics) == 1:
             # Single metric - use existing chart functions

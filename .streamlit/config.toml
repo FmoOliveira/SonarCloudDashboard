@@ -3,12 +3,12 @@ enableStaticServing = true
 
 [theme]
 base = "dark"
-primaryColor = "#1ed760"
-backgroundColor = "#2a2a2a"
-secondaryBackgroundColor = "#121212"
-codeBackgroundColor = "#121212"
-textColor = "#ffffff"
-linkColor = "#1ed760"
+primaryColor = "#3182CE"
+backgroundColor = "#1A202C"
+secondaryBackgroundColor = "#2D3748"
+codeBackgroundColor = "#1A202C"
+textColor = "#E2E8F0"
+linkColor = "#3182CE"
 borderColor = "#7c7c7c"
 showWidgetBorder = true
 baseRadius = "0.3rem"

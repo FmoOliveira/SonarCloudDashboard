@@ -60,7 +60,7 @@ def create_metric_card(title: str, value: str, icon_class: str):
         margin-bottom: 1rem;
     ">
         <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <i class="{icon_class}" style="font-size: 1.2rem; color: #1ed760;"></i>
+            <i class="{icon_class}" style="font-size: 1.2rem; color: #16a34a;"></i>
             <span>{title}</span>
         </div>
         <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
@@ -95,27 +95,63 @@ def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
         st.warning("No date information available for trend analysis.")
         return
     
-    # Create line chart
-    fig = px.line(
-        plot_data,
-        x='date',
-        y=metric,
-        color='project_name',
-        title=f"{metric.replace('_', ' ').title()} Trend Over Time",
-        markers=True,
-        color_discrete_sequence=CHART_COLORS
-    )
-    
+    # Create line chart using Graph Objects for advanced interpolation
+    from datetime import timedelta
+    fig = go.Figure()
+
+    # Add a trace for each project
+    projects = plot_data['project_name'].unique()
+    for i, project in enumerate(projects):
+        project_data = plot_data[plot_data['project_name'] == project]
+        fig.add_trace(
+            go.Scatter(
+                x=project_data['date'],
+                y=project_data[metric],
+                mode='lines+markers',
+                name=project,
+                connectgaps=True,  # Interpolates sparse missing scans
+                line=dict(shape='spline', smoothing=0.8, color=CHART_COLORS[i % len(CHART_COLORS)], width=3),
+                marker=dict(size=6, symbol='circle')
+            )
+        )
+
+    # Dynamic Axis Bounds Calculation
+    if not plot_data.empty and len(plot_data['date'].unique()) > 1:
+        time_delta = plot_data['date'].max() - plot_data['date'].min()
+        padding = time_delta * 0.05 if time_delta.days > 0 else timedelta(days=2)
+        x_min = plot_data['date'].min() - padding
+        x_max = plot_data['date'].max() + padding
+        xaxis_range = [x_min, x_max]
+    else:
+        xaxis_range = None
+        
     fig.update_layout(
-        xaxis_title="",
-        yaxis_title=metric.replace('_', ' ').title(),
-        legend_title="Project"
+         title=f"{metric.replace('_', ' ').title()} Trend Over Time",
+         xaxis=dict(
+             type='date',
+             range=xaxis_range,
+             showgrid=False,
+             zeroline=False,
+             tickformat="%Y-%m-%d"
+         ),
+         yaxis=dict(
+             title=metric.replace('_', ' ').title(),
+             showgrid=True,
+             gridcolor='#2D3748',
+             zeroline=False
+         ),
+         plot_bgcolor='rgba(0,0,0,0)',
+         paper_bgcolor='rgba(0,0,0,0)',
+         margin=dict(l=10, r=10, t=40, b=20),
+         hovermode="x unified",
+         legend=dict(
+             orientation="h",
+             yanchor="bottom",
+             y=1.05,
+             xanchor="center",
+             x=0.5
+         )
     )
-    
-    # Apply soft glow to lines
-    fig.update_traces(line=dict(width=3))
-    
-    fig = apply_modern_layout(fig)
     
     st.plotly_chart(fig, use_container_width=True)
 

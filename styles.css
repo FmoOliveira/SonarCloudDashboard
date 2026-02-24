@@ -1,0 +1,27 @@
+/* Targeting the Multi-Select Tags 
+  Targeting 'data-baseweb' attributes which are more stable than auto-generated class names.
+*/
+span[data-baseweb="tag"] {
+    background-color: #4A5568 !important; /* Muted slate background */
+    border: 1px solid #718096 !important; /* Subtle border */
+    border-radius: 4px !important;       /* Modern, slightly rounded corners */
+}
+
+/* Multi-select tag text color */
+span[data-baseweb="tag"] span {
+    color: #F7FAFC !important;
+    font-weight: 500;
+}
+
+/* Targeting specific button behaviors (Optional Polish)
+  Adding transition smoothing and hover state drop-shadows to primary buttons.
+*/
+div.stButton > button[kind="primary"] {
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+}
+
+div.stButton > button[kind="primary"]:hover {
+    box-shadow: 0 4px 12px rgba(49, 130, 206, 0.4); /* Glow effect matching primaryColor */
+    transform: translateY(-1px);
+}
