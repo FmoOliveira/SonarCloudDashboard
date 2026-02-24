@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch, call
 from azure_storage import AzureTableStorage
+import hashlib
 
 class TestDoSPrevention(unittest.TestCase):
     def setUp(self):
@@ -21,35 +22,16 @@ class TestDoSPrevention(unittest.TestCase):
             'Status': 'Complete'
         }
 
+        # Mock get_entity for migration status check
+        self.mock_table_client.get_entity.return_value = migration_status
+
         # Mock project entities in metadata
-        project1 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'proj1', 'ProjectKey': 'proj1'}
-        project2 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'proj2', 'ProjectKey': 'proj2'}
+        project1 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'hash1', 'ProjectKey': 'proj1'}
+        project2 = {'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'hash2', 'ProjectKey': 'proj2'}
 
-        # Configure mock to return migration status first, then projects
-        # We need to simulate the sequence of calls
-
-        # The implementation will likely do:
-        # 1. Get migration status
-        # 2. Query metadata partition
-
-        # We can use side_effect to return different values for different calls
-        # But query_entities arguments differ.
-
-        def query_side_effect(**kwargs):
-            query_filter = kwargs.get('query_filter')
-            parameters = kwargs.get('parameters')
-
-            if "RowKey eq @rk" in query_filter and parameters.get('rk') == 'MIGRATION_STATUS':
-                return [migration_status]
-
-            if "PartitionKey eq @pk" in query_filter and parameters.get('pk') == 'METADATA_PROJECTS':
-                # Should filter out MIGRATION_STATUS in the code or here?
-                # The query usually fetches everything in partition.
-                return [migration_status, project1, project2]
-
-            return []
-
-        self.mock_table_client.query_entities.side_effect = query_side_effect
+        # Mock query_entities to return metadata list
+        # It's called with "PartitionKey eq @pk"
+        self.mock_table_client.query_entities.return_value = [migration_status, project1, project2]
 
         projects = self.storage.get_stored_projects()
 
@@ -63,11 +45,8 @@ class TestDoSPrevention(unittest.TestCase):
     def test_get_stored_projects_performs_scan_and_backfill_if_migration_incomplete(self):
         """Test that get_stored_projects scans and backfills if migration is incomplete"""
 
-        # 1. Migration status check returns empty
-        def query_side_effect(**kwargs):
-             return []
-
-        self.mock_table_client.query_entities.side_effect = query_side_effect
+        # 1. Migration status check returns error (incomplete)
+        self.mock_table_client.get_entity.side_effect = Exception("Not found")
 
         # 2. list_entities returns all data (simulation of full scan)
         self.mock_table_client.list_entities.return_value = [
@@ -82,16 +61,12 @@ class TestDoSPrevention(unittest.TestCase):
 
         # Verify backfill occurred
         # upsert_entity should be called for projA, projB, and MIGRATION_STATUS
-        expected_calls = [
-            call({'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'projA', 'ProjectKey': 'projA', 'LastUpdated': unittest.mock.ANY}),
-            call({'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'projB', 'ProjectKey': 'projB', 'LastUpdated': unittest.mock.ANY}),
-            call({'PartitionKey': 'METADATA_PROJECTS', 'RowKey': 'MIGRATION_STATUS', 'Status': 'Complete', 'LastUpdated': unittest.mock.ANY})
-        ]
+
+        # Calculate expected hashes
+        hash_A = hashlib.sha256('projA'.encode('utf-8')).hexdigest()
+        hash_B = hashlib.sha256('projB'.encode('utf-8')).hexdigest()
 
         # We check that upsert_entity was called with these arguments (order might vary)
-        # Using any_order=True if possible, but assertHasCalls works for list
-
-        # Let's check individually to be safe against order
         upsert_calls = self.mock_table_client.upsert_entity.call_args_list
         self.assertEqual(len(upsert_calls), 3)
 
@@ -99,8 +74,8 @@ class TestDoSPrevention(unittest.TestCase):
         upserted_entities = [c[0][0] for c in upsert_calls]
 
         row_keys = [e['RowKey'] for e in upserted_entities]
-        self.assertIn('projA', row_keys)
-        self.assertIn('projB', row_keys)
+        self.assertIn(hash_A, row_keys)
+        self.assertIn(hash_B, row_keys)
         self.assertIn('MIGRATION_STATUS', row_keys)
 
 if __name__ == '__main__':

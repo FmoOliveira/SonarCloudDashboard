@@ -122,8 +122,8 @@ class AzureTableStorage:
 
             # Update metadata partition
             try:
-                # Sanitize RowKey to handle special characters in project_key
-                metadata_row_key = self._sanitize_key(project_key)
+                # Use secure hash for RowKey to prevent collisions
+                metadata_row_key = self._get_metadata_row_key(project_key)
                 self.table_client.upsert_entity({
                     "PartitionKey": self.METADATA_PARTITION,
                     "RowKey": metadata_row_key,
@@ -291,13 +291,13 @@ class AzureTableStorage:
                         select=['RowKey', 'ProjectKey']
                     )
 
-                    projects = []
+                    projects = set()
                     for entity in metadata_entities:
                         # Exclude the marker entity itself
                         if entity['RowKey'] != self.MIGRATION_MARKER:
-                            projects.append(entity.get('ProjectKey', entity['RowKey']))
+                            projects.add(entity.get('ProjectKey', entity['RowKey']))
 
-                    return projects
+                    return list(projects)
             except Exception:
                 # Migration marker not found or other error, fallback to scan
                 pass
@@ -322,7 +322,7 @@ class AzureTableStorage:
             try:
                 # Upsert all found projects to metadata partition
                 for project in project_list:
-                    metadata_row_key = self._sanitize_key(project)
+                    metadata_row_key = self._get_metadata_row_key(project)
                     self.table_client.upsert_entity({
                         "PartitionKey": self.METADATA_PARTITION,
                         "RowKey": metadata_row_key,
@@ -381,12 +381,27 @@ class AzureTableStorage:
                     break
 
                 if not has_remaining_data:
-                    # Remove from metadata partition
-                    metadata_row_key = self._sanitize_key(project_key)
-                    self.table_client.delete_entity(
-                        partition_key=self.METADATA_PARTITION,
-                        row_key=metadata_row_key
-                    )
+                    # Remove from metadata partition (clean up both potential keys)
+                    try:
+                        # Try deleting legacy sanitized key
+                        old_key = self._sanitize_key(project_key)
+                        self.table_client.delete_entity(
+                            partition_key=self.METADATA_PARTITION,
+                            row_key=old_key
+                        )
+                    except Exception:
+                        pass
+
+                    try:
+                        # Try deleting secure hash key
+                        new_key = self._get_metadata_row_key(project_key)
+                        self.table_client.delete_entity(
+                            partition_key=self.METADATA_PARTITION,
+                            row_key=new_key
+                        )
+                    except Exception:
+                        pass
+
             except Exception as e:
                 # Log but don't fail
                 st.warning(f"Failed to cleanup metadata: {str(e)}")

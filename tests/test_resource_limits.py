@@ -13,7 +13,7 @@ class TestResourceLimits(unittest.TestCase):
             mock_service_client.return_value.get_table_client.return_value = self.mock_table_client
             self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
-    @patch('azure_storage.MAX_RETRIEVAL_LIMIT', 10, create=True)
+    @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
     @patch('streamlit.warning')
     def test_retrieve_metrics_limit(self, mock_warning):
         """Test that retrieve_metrics_data stops after limit"""
@@ -29,12 +29,12 @@ class TestResourceLimits(unittest.TestCase):
         # Verify warning was called with appropriate message
         found_limit_warning = False
         for call in mock_warning.call_args_list:
-            if "limit" in call[0][0] and "truncated" in call[0][0]:
+            if call[0] and "limit" in call[0][0] and "truncated" in call[0][0]:
                 found_limit_warning = True
                 break
         self.assertTrue(found_limit_warning, "Did not warn about truncated results")
 
-    @patch('azure_storage.MAX_RETRIEVAL_LIMIT', 10, create=True)
+    @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
     @patch('streamlit.warning')
     def test_get_stored_projects_limit(self, mock_warning):
         """Test that get_stored_projects stops after limit (slow path)"""
@@ -54,7 +54,10 @@ class TestResourceLimits(unittest.TestCase):
         # Verify warning was called with appropriate message
         found_limit_warning = False
         for call in mock_warning.call_args_list:
-            if "limit" in call[0][0] and "incomplete" in call[0][0]:
+            if call[0] and "limit" in call[0][0] and "incomplete" in call[0][0]:
                 found_limit_warning = True
                 break
         self.assertTrue(found_limit_warning, "Did not warn about incomplete project list")
+
+if __name__ == '__main__':
+    unittest.main()
