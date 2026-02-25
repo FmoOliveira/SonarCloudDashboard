@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from ui_styles import inject_custom_css
 import asyncio
 import aiohttp
-from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception, RetryCallState
+from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
 
 load_dotenv()
 
@@ -223,10 +223,7 @@ def fetch_project_branches(_api, project_key):
         st.warning(f"Could not fetch branches for {project_key}: {str(e)}")
         return []
 
-def should_retry_api_call(retry_state: RetryCallState) -> bool:
-    if not retry_state.outcome.failed:
-        return False
-    exc = retry_state.outcome.exception()
+def should_retry_api_call(exc: Exception) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
