@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 from sonarcloud_api import SonarCloudAPI
-from dashboard_components import create_metric_card, render_dynamic_subplots, render_area_chart
+from dashboard_components import create_metric_card, render_dynamic_subplots, render_area_chart, inject_statistical_anomalies
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
 from ui_styles import inject_custom_css
@@ -555,13 +555,27 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         st.stop()
         
     if not df.empty:
+        fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
             fig = render_dynamic_subplots(df, confirmed_metrics, project_names, chart_type=plot_type)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
         elif chart_type == "Area Chart":
-            render_area_chart(df, date_col='date', metrics=confirmed_metrics)
+            fig = render_area_chart(df, date_col='date', metrics=confirmed_metrics)
+            
+        if fig:
+            # Inject Decorator Pipeline
+            if st.session_state.get('show_anomalies', False):
+                fig = inject_statistical_anomalies(fig, df, 'date', confirmed_metrics)
+                
+            st.plotly_chart(fig, use_container_width=True)
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.toggle(
+            "Detect Anomalies (Z-Score > 3.0)", 
+            value=False, 
+            key="show_anomalies",
+            help="Scans the historical timeline for severe degradations exceeding 3 standard deviations and injects UI markers."
+        )
     
     # Project comparison table
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Metric Details</h2>', unsafe_allow_html=True)

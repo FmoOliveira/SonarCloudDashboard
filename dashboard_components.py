@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
 # Spotify-inspired Color Palette
@@ -224,7 +225,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         )
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    return fig
 
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     """Create a bar chart comparing projects"""
@@ -338,7 +339,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    return fig
 
 def create_rating_gauge(rating_value: float, title: str):
     """Create a gauge chart for rating metrics"""
@@ -513,3 +514,59 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     fig = apply_modern_layout(fig)
     
     st.plotly_chart(fig, use_container_width=True)
+
+def inject_statistical_anomalies(
+    fig: go.Figure, 
+    df: pd.DataFrame, 
+    date_col: str, 
+    metrics: list, 
+    window_size: int = 14, 
+    z_threshold: float = 3.0
+) -> go.Figure:
+    """
+    Scans the dataframe for statistically significant metric spikes using a rolling Z-score 
+    and injects vertical warning lines into the Plotly figure.
+    """
+    df_sorted = df.sort_values(by=date_col).reset_index(drop=True)
+    flagged_dates = set()
+
+    for metric in metrics:
+        if metric not in df_sorted.columns:
+            continue
+            
+        # 1. Calculate Rolling Statistics
+        # min_periods=1 ensures the mean calculates immediately, preventing cold starts
+        rolling_mean = df_sorted[metric].rolling(window=window_size, min_periods=1).mean()
+        
+        # Standard deviation requires at least 2 points
+        rolling_std = df_sorted[metric].rolling(window=window_size, min_periods=2).std()
+        
+        # 2. The Zero-Variance Edge Case (Architectural Key)
+        # If a metric is perfectly stable (e.g., 0 vulnerabilities for a month), std is 0.
+        # Division by zero yields NaN. We replace 0 and NaN with infinity to force 
+        # the resulting Z-score to 0, preventing the pipeline from crashing.
+        rolling_std = rolling_std.replace(0, np.nan).fillna(float('inf'))
+        
+        # 3. Vectorized Z-Score Calculation
+        z_scores = (df_sorted[metric] - rolling_mean) / rolling_std
+        
+        # 4. Filter for positive anomalies (we only care about quality degradation)
+        anomalies = df_sorted[(z_scores > z_threshold)]
+        
+        for idx, row in anomalies.iterrows():
+            anomaly_date = row[date_col]
+            
+            if anomaly_date not in flagged_dates:
+                # 5. Inject the UI Marker (Cast Timestamp to Unix milliseconds to prevent Plotly annotation TypeErrors)
+                fig.add_vline(
+                    x=anomaly_date.timestamp() * 1000,
+                    line_width=2,
+                    line_dash="dot",
+                    line_color="rgba(229, 62, 62, 0.8)", # Warning red
+                    annotation_text=f"🚨 Statistical Anomaly",
+                    annotation_position="top right",
+                    annotation_font=dict(size=10, color="#FCA5A5")
+                )
+                flagged_dates.add(anomaly_date)
+
+    return fig
