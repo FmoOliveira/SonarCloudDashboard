@@ -124,8 +124,12 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         x_min = plot_data['date'].min() - padding
         x_max = plot_data['date'].max() + padding
         xaxis_range = [x_min, x_max]
+        
+        # Prevent intraday ticks (duplicate dates) on short timeframes
+        dtick_val = 86400000.0 if time_delta.days <= 14 else None
     else:
         xaxis_range = None
+        dtick_val = None
 
     projects = plot_data['project_name'].unique()
     
@@ -190,13 +194,17 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        xaxis_updates[axis_key] = dict(
+        axis_dict = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
             zeroline=False,
             tickformat="%Y-%m-%d"
         )
+        if dtick_val:
+            axis_dict['dtick'] = dtick_val
+            
+        xaxis_updates[axis_key] = axis_dict
 
     fig.update_layout(
         height=total_height, # Inject the dynamically calculated height
