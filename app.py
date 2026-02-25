@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 from sonarcloud_api import SonarCloudAPI
-from dashboard_components import create_metric_card, render_dynamic_subplots, create_comparison_chart
+from dashboard_components import create_metric_card, render_dynamic_subplots, render_area_chart
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
 from ui_styles import inject_custom_css
@@ -503,10 +503,47 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
+    def get_valid_chart_types(num_projects: int, num_metrics: int) -> list[str]:
+        """
+        Calculates architecturally valid visualization types based on data dimensionality.
+        
+        Time Complexity: O(1)
+        Design Decision: Whitelists specific chart types rather than blacklisting, 
+        ensuring a fail-secure UI state if new data structures are introduced later.
+        """
+        # The Line Chart is the universal standard for temporal aggregates.
+        # It is our immutable baseline.
+        valid_charts = ["Line Chart"]
+        
+        # Bar charts introduce visual clutter on time-series data unless 
+        # strictly isolated to cross-project comparisons of a single metric.
+        if num_projects > 1 and num_metrics == 1:
+            valid_charts.append("Bar Chart (Grouped)")
+            
+        # Area charts are visually effective for volume-based metrics 
+        # (e.g., 'lines_of_code', 'duplicated_lines') but become unreadable 
+        # overlapping messes if more than one project or too many metrics are selected.
+        if num_projects == 1 and num_metrics <= 2:
+            valid_charts.append("Area Chart")
+            
+        # Notice: "Box Plot" is intentionally excluded from this routing logic entirely,
+        # as temporal SonarCloud aggregates lack the internal variance required to render them.
+
+        return valid_charts
+
     with col2:
+        # 1. Calculate the current dimensional state
+        active_project_count = len(selected_projects) if isinstance(selected_projects, list) else 1
+        active_metric_count = len(st.session_state.get('metric_selector', []))
+
+        # 2. Fetch the strict list of allowed visualizations
+        allowed_charts = get_valid_chart_types(active_project_count, active_metric_count)
+
+        # 3. Render the restricted UI component
         chart_type = st.selectbox(
             "Chart type",
-            ["Line Chart", "Bar Chart", "Box Plot"]
+            options=allowed_charts,
+            help="Chart options dynamically update based on the number of projects and metrics selected to ensure data is visually readable."
         )
     st.markdown("</div>", unsafe_allow_html=True) # Ending expander conceptually if html, but we'll use Streamlit native expander by wrapping it
 
@@ -518,15 +555,13 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         st.stop()
         
     if not df.empty:
-        if chart_type in ["Line Chart", "Bar Chart"]:
-            render_dynamic_subplots(df, confirmed_metrics, project_names, chart_type=chart_type)
-        else:
-            if len(confirmed_metrics) > 1:
-                st.info("Multi-metric overview is optimally rendered as a Line Chart or Bar Chart. Displaying the first selected metric.")
-            selected_metric = confirmed_metrics[0]
-            if chart_type == "Box Plot":
-                from dashboard_components import create_box_plot # if existing
-                create_box_plot(df, selected_metric, project_names)
+        if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
+            plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
+            fig = render_dynamic_subplots(df, confirmed_metrics, project_names, chart_type=plot_type)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        elif chart_type == "Area Chart":
+            render_area_chart(df, date_col='date', metrics=confirmed_metrics)
     
     # Project comparison table
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Metric Details</h2>', unsafe_allow_html=True)

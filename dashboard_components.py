@@ -259,32 +259,84 @@ def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     
     st.plotly_chart(fig, use_container_width=True)
 
-def create_box_plot(df: pd.DataFrame, metric: str, project_names: dict):
-    """Create a box plot showing the distribution of a metric across projects over time"""
-    if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figure:
+    """
+    Renders an overlaid area chart optimized for dark mode visibility.
+    """
+    if df.empty or not metrics:
+        st.warning("No data available for the selected metrics.")
         return
-    
+        
+    fig = go.Figure()
+
+    # Design Decision: Pre-calculate RGBA strings for high-contrast dark mode.
+    # The line remains 100% opaque (alpha=1.0) for crisp boundaries, 
+    # while the fill is dropped to 25% (alpha=0.25) to allow background traces to bleed through.
+    color_palette = [
+        ("rgba(49, 130, 206, 1.0)", "rgba(49, 130, 206, 0.25)"),   # Primary Blue
+        ("rgba(72, 187, 120, 1.0)", "rgba(72, 187, 120, 0.25)"),   # Success Green
+        ("rgba(237, 137, 54, 1.0)", "rgba(237, 137, 54, 0.25)")    # Warning Orange
+    ]
+
     plot_data = df.copy()
-    plot_data['project_name'] = plot_data['project_key'].map(project_names)
-    
-    fig = px.box(
-        plot_data,
-        x='project_name',
-        y=metric,
-        title=f"{metric.replace('_', ' ').title()} Distribution by Project",
-        color='project_name',
-        color_discrete_sequence=CHART_COLORS
-    )
-    
+    if date_col in plot_data.columns:
+        try:
+            plot_data[date_col] = pd.to_datetime(plot_data[date_col], format='mixed', errors='coerce', utc=True)
+            plot_data[date_col] = plot_data[date_col].dt.tz_convert(None)
+            plot_data = plot_data.sort_values(date_col)
+        except Exception as e:
+            st.warning(f"Could not parse dates: {str(e)}")
+            return
+            
+    # Calculate global max values to order traces Z-index correctly (Largest in back, smallest in front)
+    try:
+        metrics.sort(key=lambda m: plot_data[m].max() if m in plot_data.columns else 0, reverse=True)
+    except Exception:
+        pass # fallback to default order
+
+    for i, metric in enumerate(metrics):
+        if metric in plot_data.columns:
+            line_color, fill_color = color_palette[i % len(color_palette)]
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=plot_data[date_col],
+                    y=plot_data[metric],
+                    mode='lines',
+                    name=metric.replace('_', ' ').title(),
+                    # spline smoothing maintains the modern aesthetic
+                    line=dict(width=2, color=line_color, shape='spline', smoothing=0.8), 
+                    fill='tozeroy',          # Fills the area down to the X-axis (Y=0)
+                    fillcolor=fill_color,    # Applies the transparent 0.25 alpha color
+                    connectgaps=True
+                )
+            )
+
+    # Apply global theme overrides matching the config.toml secondary background
     fig.update_layout(
-        xaxis_title="",
-        yaxis_title=metric.replace('_', ' ').title(),
-        xaxis_tickangle=-45,
-        showlegend=False
+        plot_bgcolor='rgba(0,0,0,0)', 
+        paper_bgcolor='rgba(0,0,0,0)',
+        hovermode="x unified", # Essential UX: Shows the exact values of obscured traces
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='#2D3748', 
+            zeroline=False
+        ),
+        xaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            type='date',
+            tickformat="%Y-%m-%d"
+        ),
+        margin=dict(l=10, r=10, t=40, b=20),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.05,
+            xanchor="center",
+            x=0.5
+        )
     )
-    
-    fig = apply_modern_layout(fig)
     
     st.plotly_chart(fig, use_container_width=True)
 
