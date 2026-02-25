@@ -429,31 +429,77 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Detailed metrics charts
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
     
-    # Metrics selection
-    available_metrics = [
-        'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
-        'vulnerabilities', 'security_rating', 'security_hotspots', 
-        'security_review_rating', 'security_hotspots_reviewed', 'code_smells', 
-        'sqale_rating', 'major_violations', 'minor_violations', 'violations'
+    # --- 1. Define the Data Dictionary ---
+    ALL_METRICS = [
+        'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating', 
+        'vulnerabilities', 'security_rating', 'security_hotspots', 'security_review_rating', 
+        'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations', 
+        'minor_violations', 'violations'
     ]
-    available_metrics = [m for m in available_metrics if m in df.columns]
+    available_metrics = [m for m in ALL_METRICS if m in df.columns]
 
-    col1, col2 = st.columns(2)
+    METRIC_PRESETS = {
+        "Custom (Manual Selection)": [],
+        "Security Posture": ["vulnerabilities", "security_rating", "security_hotspots"],
+        "Reliability & Testing": ["bugs", "reliability_rating", "coverage"],
+        "Maintainability": ["code_smells", "sqale_rating", "duplicated_lines_density"],
+        "Violation Breakdown": ["violations", "major_violations", "minor_violations"]
+    }
+    
+    # Filter presets to only include available metrics from the dataframe
+    for preset in METRIC_PRESETS:
+        METRIC_PRESETS[preset] = [m for m in METRIC_PRESETS[preset] if m in available_metrics]
+
+    # --- 2. Initialize Session State ---
+    if "active_metrics" not in st.session_state:
+        st.session_state.active_metrics = METRIC_PRESETS["Security Posture"]
+
+    if "active_preset" not in st.session_state:
+        st.session_state.active_preset = "Security Posture"
+
+    # --- 3. Define the Callbacks ---
+    def sync_preset_to_multiselect():
+        """Triggered when the user clicks a pre-defined group button."""
+        selected_preset = st.session_state.preset_selector
+        if selected_preset != "Custom (Manual Selection)":
+            st.session_state.active_metrics = METRIC_PRESETS[selected_preset]
+        st.session_state.active_preset = selected_preset
+
+    def sync_multiselect_to_preset():
+        """Triggered when the user manually adds/removes a metric."""
+        current_metrics = set(st.session_state.metric_selector)
+        
+        matched_preset = "Custom (Manual Selection)"
+        for preset_name, preset_metrics in METRIC_PRESETS.items():
+            if preset_metrics and current_metrics == set(preset_metrics):
+                matched_preset = preset_name
+                break
+                
+        st.session_state.active_preset = matched_preset
+        st.session_state.active_metrics = st.session_state.metric_selector
+
+    # --- 4. Render the UI Components ---
+    st.pills(
+        "Select a specific metric group:", 
+        options=list(METRIC_PRESETS.keys()),
+        selection_mode="single",
+        key="preset_selector",
+        default=st.session_state.active_preset,
+        on_change=sync_preset_to_multiselect
+    )
+    
+    col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Pre-selected key metrics
-        key_metrics = ['vulnerabilities', 'security_rating'] # Constricted to two KPIs
-        default_metrics = [m for m in key_metrics if m in available_metrics]
         
-        if 'selected_metrics' not in st.session_state:
-            st.session_state['selected_metrics'] = default_metrics
-            
         st.multiselect(
-            "Select metrics to visualize (Max 3)",
+            "Or customize up to 3 individual metrics:",
             available_metrics,
-            key="selected_metrics",
+            key="metric_selector",
             max_selections=3,
+            default=st.session_state.active_metrics,
             format_func=lambda m: m.replace('_', ' ').title(),
+            on_change=sync_multiselect_to_preset,
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
@@ -465,7 +511,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     st.markdown("</div>", unsafe_allow_html=True) # Ending expander conceptually if html, but we'll use Streamlit native expander by wrapping it
 
     # Decoupled visualization update: directly use the selected metrics
-    confirmed_metrics = st.session_state.get('selected_metrics', [])
+    confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
         st.info("Please select at least one metric to render the trend analysis.")
