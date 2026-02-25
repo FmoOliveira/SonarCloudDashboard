@@ -21,8 +21,7 @@ def apply_modern_layout(fig):
         legend=dict(
             bgcolor='rgba(20, 30, 52, 0.5)',
             bordercolor='rgba(255, 255, 255, 0.1)',
-            borderwidth=1,
-            borderpad=4
+            borderwidth=1
         ),
         hoverlabel=dict(
             bgcolor="rgba(10, 15, 28, 0.9)",
@@ -72,7 +71,7 @@ def create_metric_card(title: str, value: str, icon_class: str):
 
 from plotly.subplots import make_subplots
 
-def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict):
+def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict, chart_type: str = "Line Chart"):
     """
     Renders stacked subplots with synchronized X-axes to handle varying scales.
     Dynamically scales height based on the number of metrics.
@@ -137,39 +136,73 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
             # Add a trace for each project
             for j, project in enumerate(projects):
                 project_data = plot_data[plot_data['project_name'] == project]
-                # Only show legend on the first subplot to avoid duplicates
-                show_legend_for_trace = True if i == 0 else False
                 
-                fig.add_trace(
-                    go.Scatter(
-                        x=project_data['date'],
-                        y=project_data[metric],
-                        mode='lines+markers',
-                        name=project,
-                        connectgaps=True,  # Interpolates sparse missing scans
-                        line=dict(shape='spline', smoothing=0.8, color=CHART_COLORS[j % len(CHART_COLORS)], width=3),
-                        marker=dict(size=6, symbol='circle'),
-                        showlegend=show_legend_for_trace
-                    ),
-                    row=row_idx, col=1
-                )
+                is_single_project = len(projects) == 1
+                
+                # If single project, color by metric and show metric in legend. 
+                # If multiple projects, color by project and show project in legend (only on first subplot).
+                if is_single_project:
+                    trace_color = CHART_COLORS[i % len(CHART_COLORS)]
+                    trace_name = metric.replace('_', ' ').title()
+                    trace_legendgroup = metric
+                    show_legend_for_trace = True # Show legend for each metric
+                else:
+                    trace_color = CHART_COLORS[j % len(CHART_COLORS)]
+                    trace_name = project
+                    trace_legendgroup = project
+                    show_legend_for_trace = True if i == 0 else False
+                
+                if chart_type == "Bar Chart":
+                    fig.add_trace(
+                        go.Bar(
+                            x=project_data['date'],
+                            y=project_data[metric],
+                            name=trace_name,
+                            marker_color=trace_color,
+                            legendgroup=trace_legendgroup,
+                            showlegend=show_legend_for_trace,
+                            width=1000 * 3600 * 20 # Force width to 20 hours (in milliseconds)
+                        ),
+                        row=row_idx, col=1
+                    )
+                else:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=project_data['date'],
+                            y=project_data[metric],
+                            mode='lines+markers',
+                            name=trace_name,
+                            connectgaps=True,  # Interpolates sparse missing scans
+                            line=dict(shape='spline', smoothing=0.8, color=trace_color, width=3),
+                            marker=dict(size=6, symbol='circle'),
+                            legendgroup=trace_legendgroup,
+                            showlegend=show_legend_for_trace
+                        ),
+                        row=row_idx, col=1
+                    )
             
             # Dynamic Y-axis scaling per subplot
             y_title = "Percentage %" if "density" in metric or "coverage" in metric else "Count"
             fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, gridcolor='#2D3748', zeroline=False)
 
+    # Compute exact layout updates for every subplot X-axis to force Date continuity 
+    # instead of categorical string fallbacks for Bar charts
+    xaxis_updates = {}
+    for i in range(1, num_metrics + 1):
+        axis_key = f"xaxis{i}" if i > 1 else "xaxis"
+        xaxis_updates[axis_key] = dict(
+            type='date',
+            range=xaxis_range,
+            showgrid=False,
+            zeroline=False,
+            tickformat="%Y-%m-%d"
+        )
+
     fig.update_layout(
         height=total_height, # Inject the dynamically calculated height
+        barmode='group' if chart_type == "Bar Chart" else None,
         margin=dict(l=20, r=20, t=60, b=20),
-        xaxis=dict(
-             type='date',
-             range=xaxis_range,
-             showgrid=False,
-             zeroline=False,
-             tickformat="%Y-%m-%d"
-        ),
-        # Apply bounds to the shared x-axis on the bottom most row
-        **{f"xaxis{num_metrics}": dict(type='date', range=xaxis_range, showgrid=False, zeroline=False, tickformat="%Y-%m-%d")},
+        **xaxis_updates,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         showlegend=True,
@@ -214,6 +247,35 @@ def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     
     # Modern rounded bars
     fig.update_traces(marker_line_width=0, opacity=0.9)
+    fig = apply_modern_layout(fig)
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+def create_box_plot(df: pd.DataFrame, metric: str, project_names: dict):
+    """Create a box plot showing the distribution of a metric across projects over time"""
+    if df.empty or metric not in df.columns:
+        st.warning("No data available for the selected metric.")
+        return
+    
+    plot_data = df.copy()
+    plot_data['project_name'] = plot_data['project_key'].map(project_names)
+    
+    fig = px.box(
+        plot_data,
+        x='project_name',
+        y=metric,
+        title=f"{metric.replace('_', ' ').title()} Distribution by Project",
+        color='project_name',
+        color_discrete_sequence=CHART_COLORS
+    )
+    
+    fig.update_layout(
+        xaxis_title="",
+        yaxis_title=metric.replace('_', ' ').title(),
+        xaxis_tickangle=-45,
+        showlegend=False
+    )
+    
     fig = apply_modern_layout(fig)
     
     st.plotly_chart(fig, use_container_width=True)

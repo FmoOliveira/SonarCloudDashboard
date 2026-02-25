@@ -294,7 +294,6 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return dict(zip(project_keys, results))
 
-@st.cache_data(ttl=300, show_spinner=False)  # Cache for 5 minutes
 def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
     """Fetch metrics data for selected projects with Azure Table Storage integration"""
     all_data = []
@@ -454,6 +453,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             available_metrics,
             key="selected_metrics",
             max_selections=3,
+            format_func=lambda m: m.replace('_', ' ').title(),
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
@@ -472,15 +472,13 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         st.stop()
         
     if not df.empty:
-        if chart_type == "Line Chart":
-            render_dynamic_subplots(df, confirmed_metrics, project_names)
+        if chart_type in ["Line Chart", "Bar Chart"]:
+            render_dynamic_subplots(df, confirmed_metrics, project_names, chart_type=chart_type)
         else:
             if len(confirmed_metrics) > 1:
-                st.info("Multi-metric overview is optimally rendered as a Line Chart. Displaying the first selected metric.")
+                st.info("Multi-metric overview is optimally rendered as a Line Chart or Bar Chart. Displaying the first selected metric.")
             selected_metric = confirmed_metrics[0]
-            if chart_type == "Bar Chart":
-                create_comparison_chart(df, selected_metric, project_names)
-            elif chart_type == "Box Plot":
+            if chart_type == "Box Plot":
                 from dashboard_components import create_box_plot # if existing
                 create_box_plot(df, selected_metric, project_names)
     
