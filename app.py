@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 from sonarcloud_api import SonarCloudAPI
-from dashboard_components import create_metric_card, create_trend_chart, create_comparison_chart
+from dashboard_components import create_metric_card, render_dynamic_subplots, create_comparison_chart
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
 from ui_styles import inject_custom_css
@@ -450,9 +450,11 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             st.session_state['selected_metrics'] = default_metrics
             
         st.multiselect(
-            "Select metrics to visualize",
+            "Select metrics to visualize (Max 3)",
             available_metrics,
-            key="selected_metrics"
+            key="selected_metrics",
+            max_selections=3,
+            help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
     with col2:
@@ -464,19 +466,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
     # Decoupled visualization update: directly use the selected metrics
     confirmed_metrics = st.session_state.get('selected_metrics', [])
-    if confirmed_metrics and not df.empty:
-        if len(confirmed_metrics) == 1:
-            # Single metric - use existing chart functions
+    
+    if not confirmed_metrics:
+        st.info("Please select at least one metric to render the trend analysis.")
+        st.stop()
+        
+    if not df.empty:
+        if chart_type == "Line Chart":
+            render_dynamic_subplots(df, confirmed_metrics, project_names)
+        else:
+            if len(confirmed_metrics) > 1:
+                st.info("Multi-metric overview is optimally rendered as a Line Chart. Displaying the first selected metric.")
             selected_metric = confirmed_metrics[0]
-            if chart_type == "Line Chart":
-                create_trend_chart(df, selected_metric, project_names)
-            elif chart_type == "Bar Chart":
+            if chart_type == "Bar Chart":
                 create_comparison_chart(df, selected_metric, project_names)
             elif chart_type == "Box Plot":
+                from dashboard_components import create_box_plot # if existing
                 create_box_plot(df, selected_metric, project_names)
-        else:
-            # Multiple metrics - create multi-metric chart
-            create_multi_metric_chart(df, confirmed_metrics, project_names, chart_type)
     
     # Project comparison table
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Metric Details</h2>', unsafe_allow_html=True)
@@ -556,58 +562,6 @@ def create_box_plot(df, metric, project_names):
     
     st.plotly_chart(fig, use_container_width=True)
 
-def create_multi_metric_chart(df, metrics, project_names, chart_type):
-    """Create a chart with multiple metrics"""
-    if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
-        return
-    
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
-    
-    # Prepare data
-    plot_data = df.copy()
-    plot_data['project_name'] = plot_data['project_key'].map(project_names)
-    
-    if chart_type == "Line Chart":
-        # Convert date column
-        if 'date' in plot_data.columns:
-            try:
-                plot_data['date'] = pd.to_datetime(plot_data['date'], format='mixed', utc=True)
-                plot_data['date'] = plot_data['date'].dt.tz_convert(None)
-                plot_data = plot_data.sort_values('date')
-            except Exception as e:
-                st.warning(f"Could not parse dates: {str(e)}")
-                return
-        else:
-            st.warning("No date information available for trend analysis.")
-            return
-        
-        # Create multi-metric line chart
-        fig = go.Figure()
-        
-        for metric in metrics:
-            if metric in plot_data.columns:
-                fig.add_trace(go.Scatter(
-                    x=plot_data['date'],
-                    y=plot_data[metric],
-                    mode='lines+markers',
-                    name=metric.replace('_', ' ').title(),
-                    line=dict(width=2)
-                ))
-        
-        fig.update_layout(
-            title=f"Multiple Metrics Trend Over Time",
-            xaxis_title="Date",
-            yaxis_title="Values",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=500
-        )
-        
-    else:
-        st.info("Multi-metric view is currently available for Line Charts only. Please select Line Chart or choose a single metric for other chart types.")
-        return
     
     st.plotly_chart(fig, use_container_width=True)
 

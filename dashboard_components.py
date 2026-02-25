@@ -70,11 +70,34 @@ def create_metric_card(title: str, value: str, icon_class: str):
     """
     st.markdown(html, unsafe_allow_html=True)
 
-def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
-    """Create a line chart showing metric trends over time"""
-    if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+from plotly.subplots import make_subplots
+
+def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict):
+    """
+    Renders stacked subplots with synchronized X-axes to handle varying scales.
+    Dynamically scales height based on the number of metrics.
+    """
+    if df.empty or not metrics:
+        st.warning("No data available for the selected metrics.")
         return
+        
+    num_metrics = len(metrics)
+    
+    # Base height per subplot (in pixels)
+    BASE_ROW_HEIGHT = 220 
+    # Account for the global title, legend, and top/bottom margins
+    CHART_CHROME_PADDING = 100 
+    
+    # Calculate total figure height
+    total_height = (num_metrics * BASE_ROW_HEIGHT) + CHART_CHROME_PADDING
+
+    fig = make_subplots(
+        rows=num_metrics, 
+        cols=1, 
+        shared_xaxes=True,
+        vertical_spacing=0.08, # Provide breathing room between the X-axis and the next title
+        subplot_titles=[m.replace('_', ' ').title() for m in metrics]
+    )
     
     # Prepare data for plotting
     plot_data = df.copy()
@@ -83,9 +106,7 @@ def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
     # Convert date column if it exists
     if 'date' in plot_data.columns:
         try:
-            # Handle different date formats from SonarCloud API
             plot_data['date'] = pd.to_datetime(plot_data['date'], format='mixed', errors='coerce', utc=True)
-            # Convert to consistent timezone
             plot_data['date'] = plot_data['date'].dt.tz_convert(None)
             plot_data = plot_data.sort_values('date')
         except Exception as e:
@@ -94,27 +115,9 @@ def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
     else:
         st.warning("No date information available for trend analysis.")
         return
-    
-    # Create line chart using Graph Objects for advanced interpolation
+
     from datetime import timedelta
-    fig = go.Figure()
-
-    # Add a trace for each project
-    projects = plot_data['project_name'].unique()
-    for i, project in enumerate(projects):
-        project_data = plot_data[plot_data['project_name'] == project]
-        fig.add_trace(
-            go.Scatter(
-                x=project_data['date'],
-                y=project_data[metric],
-                mode='lines+markers',
-                name=project,
-                connectgaps=True,  # Interpolates sparse missing scans
-                line=dict(shape='spline', smoothing=0.8, color=CHART_COLORS[i % len(CHART_COLORS)], width=3),
-                marker=dict(size=6, symbol='circle')
-            )
-        )
-
+    
     # Dynamic Axis Bounds Calculation
     if not plot_data.empty and len(plot_data['date'].unique()) > 1:
         time_delta = plot_data['date'].max() - plot_data['date'].min()
@@ -124,35 +127,62 @@ def create_trend_chart(df: pd.DataFrame, metric: str, project_names: dict):
         xaxis_range = [x_min, x_max]
     else:
         xaxis_range = None
-        
+
+    projects = plot_data['project_name'].unique()
+    
+    for i, metric in enumerate(metrics):
+        if metric in plot_data.columns:
+            row_idx = i + 1 
+            
+            # Add a trace for each project
+            for j, project in enumerate(projects):
+                project_data = plot_data[plot_data['project_name'] == project]
+                # Only show legend on the first subplot to avoid duplicates
+                show_legend_for_trace = True if i == 0 else False
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=project_data['date'],
+                        y=project_data[metric],
+                        mode='lines+markers',
+                        name=project,
+                        connectgaps=True,  # Interpolates sparse missing scans
+                        line=dict(shape='spline', smoothing=0.8, color=CHART_COLORS[j % len(CHART_COLORS)], width=3),
+                        marker=dict(size=6, symbol='circle'),
+                        showlegend=show_legend_for_trace
+                    ),
+                    row=row_idx, col=1
+                )
+            
+            # Dynamic Y-axis scaling per subplot
+            y_title = "Percentage %" if "density" in metric or "coverage" in metric else "Count"
+            fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, gridcolor='#2D3748', zeroline=False)
+
     fig.update_layout(
-         title=f"{metric.replace('_', ' ').title()} Trend Over Time",
-         xaxis=dict(
+        height=total_height, # Inject the dynamically calculated height
+        margin=dict(l=20, r=20, t=60, b=20),
+        xaxis=dict(
              type='date',
              range=xaxis_range,
              showgrid=False,
              zeroline=False,
              tickformat="%Y-%m-%d"
-         ),
-         yaxis=dict(
-             title=metric.replace('_', ' ').title(),
-             showgrid=True,
-             gridcolor='#2D3748',
-             zeroline=False
-         ),
-         plot_bgcolor='rgba(0,0,0,0)',
-         paper_bgcolor='rgba(0,0,0,0)',
-         margin=dict(l=10, r=10, t=40, b=20),
-         hovermode="x unified",
-         legend=dict(
+        ),
+        # Apply bounds to the shared x-axis on the bottom most row
+        **{f"xaxis{num_metrics}": dict(type='date', range=xaxis_range, showgrid=False, zeroline=False, tickformat="%Y-%m-%d")},
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=True,
+        hovermode="x unified",
+        legend=dict(
              orientation="h",
              yanchor="bottom",
              y=1.05,
              xanchor="center",
              x=0.5
-         )
+        )
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)
 
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
