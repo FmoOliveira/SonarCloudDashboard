@@ -91,7 +91,7 @@ def main():
     inject_custom_css()
     load_css("styles.css")
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
-    st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin-top: -1.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     #st.markdown("Monitor and analyze your organization's code quality metrics")
     
     # Initialize API and storage
