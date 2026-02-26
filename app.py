@@ -14,14 +14,11 @@ from dashboard_components import (
     compress_to_parquet,
     decompress_from_parquet
 )
-from azure_storage import AzureTableStorage
-from dotenv import load_dotenv
+from database.factory import get_storage_client
 from ui_styles import inject_custom_css
 import asyncio
 import aiohttp
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
-
-load_dotenv()
 
 def load_css(file_name: str) -> None:
     """Reads a CSS file and injects it into the Streamlit DOM."""
@@ -65,25 +62,32 @@ def handle_project_change():
         st.session_state['metric_selector'] = ["vulnerabilities", "security_rating"]
 
 
+def get_secret(domain: str, key: str) -> str:
+    """
+    Safely extracts secrets with O(1) dictionary lookup, 
+    enforcing strict validation before downstream API calls occur.
+    """
+    try:
+        return st.secrets[domain][key]
+    except FileNotFoundError:
+        st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
+        st.stop()
+    except KeyError:
+        error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
+        logging.critical(error_msg)
+        st.error(error_msg, icon="🚨")
+        st.stop()
+
 # Initialize SonarCloud API
 @st.cache_resource
 def init_sonarcloud_api():
-    # Load environment variables from a .env file if present
-    
-    token = os.getenv("SONARCLOUD_TOKEN", "")
-    if not token:
-        st.error("SonarCloud token not found. Please set the SONARCLOUD_TOKEN environment variable.")
-        st.stop()
+    token = get_secret("sonarcloud", "api_token")
     return SonarCloudAPI(token)
 
 @st.cache_resource
-def init_azure_storage():
-    """Initialize Azure Table Storage client"""
-    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
-    if not connection_string:
-        st.error("Azure Storage connection string not found. Please set the AZURE_STORAGE_CONNECTION_STRING environment variable.")
-        st.stop()
-    return AzureTableStorage(connection_string)
+def init_storage_client():
+    """Dynamically initialize the configured database client via Factory"""
+    return get_storage_client()
 
 # Main app
 def main():
@@ -95,9 +99,9 @@ def main():
     
     # Initialize API and storage
     api = init_sonarcloud_api()
-    storage = init_azure_storage()
+    storage = init_storage_client()
     
-    organization = os.getenv("SONARCLOUD_ORG", "organization_key")
+    organization = get_secret("sonarcloud", "organization_key")
     
     # Fetch projects first so we can populate the UI
     with st.spinner("Loading projects..."):
@@ -460,7 +464,7 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
              projects_to_fetch.append(project_key)
     
     if projects_to_fetch:
-        token = os.getenv("SONARCLOUD_TOKEN", "")
+        token = get_secret("sonarcloud", "api_token")
         raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
         
         for project_key, result in raw_results.items():

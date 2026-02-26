@@ -6,9 +6,12 @@ from azure.data.tables import TableServiceClient
 import streamlit as st
 import pandas as pd
 from typing import Dict, List, Any, Optional
+from database.base import StorageInterface
 
-class AzureTableStorage:
-    """Azure Table Storage client for storing SonarCloud metrics"""
+class AzureTableStorage(StorageInterface):
+    """
+    Concrete implementation of StorageInterface for Azure Table Storage.
+    """
     
     # Maximum number of records to retrieve to prevent DoS/Resource Exhaustion
     MAX_RETRIEVAL_LIMIT = 10000
