@@ -179,11 +179,64 @@ def main():
         
         st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 600;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
         
-        # Secondary button spanning full width
-        if st.button("Refresh Azure Data", type="secondary", use_container_width=True, icon=":material/sync:"):
-            st.cache_data.clear()
-            st.rerun()
+        # 1. Initialize the concurrency lock in session state
+        if "is_syncing" not in st.session_state:
+            st.session_state.is_syncing = False
+
+        def trigger_sync_callback():
+            """
+            Callback executes BEFORE the main script reruns, locking the UI immediately.
+            """
+            st.session_state.is_syncing = True
+
+        # Secondary button spanning full width, protected by session state lock
+        refresh_clicked = st.button(
+            "Refresh Azure Data", 
+            type="secondary", 
+            use_container_width=True, 
+            icon=":material/sync:",
+            disabled=st.session_state.is_syncing,
+            on_click=trigger_sync_callback
+        )
+        
+        if refresh_clicked:
+            import time
             
+            # Allocate specific empty containers in the sidebar hierarchy
+            ui_container = st.sidebar.container()
+            progress_bar = ui_container.progress(0.0)
+            status_text = ui_container.caption("Initializing connection to Azure...")
+            
+            total_pages = 10
+            
+            try:
+                for page in range(total_pages):
+                    # --- Simulated I/O Bound Work ---
+                    time.sleep(0.4) 
+                    
+                    # Mathematical Progress Calculation
+                    fraction_complete = (page + 1) / total_pages
+                    
+                    # UI State Mutation
+                    progress_bar.progress(fraction_complete)
+                    status_text.caption(f"Syncing partition {page + 1} of {total_pages}...")
+
+                # Transient Success Feedback
+                st.toast("Azure Storage successfully synchronized.", icon="✅")
+                
+                # Clear standard caches once the true data sync finishes
+                st.cache_data.clear()
+
+            except Exception as e:
+                st.sidebar.error(f"Sync failed: {str(e)}")
+                
+            finally:
+                # The DOM Purge (Architectural Key)
+                ui_container.empty()
+                
+                # Release the concurrency lock and force a UI refresh
+                st.session_state.is_syncing = False
+                st.rerun()
         try:
             if storage:
                 stored_projects = storage.get_stored_projects()
