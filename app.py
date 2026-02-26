@@ -596,7 +596,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
     with col1:
         val, delta, color = get_metric_stats(df, 'vulnerabilities')
-        create_metric_card("Vulnerabilities", val, "iconoir-shield-warning", delta, color)
+        create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color)
     
     with col2:
         val, delta, color = get_metric_stats(df, 'security_hotspots')
