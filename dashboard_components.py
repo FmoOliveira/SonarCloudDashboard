@@ -4,7 +4,6 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import html
-from datetime import datetime
 
 # Spotify-inspired Color Palette
 CHART_COLORS = ['#1ed760', '#ffc862', '#2d46b9', '#b49bc8', '#1db954']
@@ -50,12 +49,22 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str):
+def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888"):
     """Create a metric card with title, value, and Iconoir icon"""
     # Escape user inputs to prevent XSS
     safe_title = html.escape(title)
     safe_value = html.escape(value)
     safe_icon = html.escape(icon_class)
+
+    delta_html = ""
+    if delta:
+        safe_delta = html.escape(delta)
+        safe_color = html.escape(delta_color)
+        delta_html = f"""
+        <div style="font-size: 0.85rem; color: {safe_color}; margin-top: 0.4rem; font-weight: 500;">
+            {safe_delta} <span style="color: #888888; font-weight: 400;">vs start</span>
+        </div>
+        """
 
     card_html = f"""
     <div style="
@@ -72,11 +81,11 @@ def create_metric_card(title: str, value: str, icon_class: str):
         <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
             {safe_value}
         </div>
+        {delta_html}
     </div>
     """
     st.markdown(card_html, unsafe_allow_html=True)
 
-from plotly.subplots import make_subplots
 
 def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict, chart_type: str = "Line Chart"):
     """
@@ -97,6 +106,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     # Calculate total figure height
     total_height = (num_metrics * BASE_ROW_HEIGHT) + CHART_CHROME_PADDING
 
+    from plotly.subplots import make_subplots
     fig = make_subplots(
         rows=num_metrics, 
         cols=1, 
