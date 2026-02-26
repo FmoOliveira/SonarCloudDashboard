@@ -34,7 +34,6 @@ def load_css(file_name: str) -> None:
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
-    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -74,7 +73,7 @@ def init_sonarcloud_api():
     
     token = os.getenv("SONARCLOUD_TOKEN", "")
     if not token:
-        st.error("⚠️ SonarCloud token not found. Please set the SONARCLOUD_TOKEN environment variable.")
+        st.error("SonarCloud token not found. Please set the SONARCLOUD_TOKEN environment variable.")
         st.stop()
     return SonarCloudAPI(token)
 
@@ -83,7 +82,7 @@ def init_azure_storage():
     """Initialize Azure Table Storage client"""
     connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
     if not connection_string:
-        st.error("⚠️ Azure Storage connection string not found. Please set the AZURE_STORAGE_CONNECTION_STRING environment variable.")
+        st.error("Azure Storage connection string not found. Please set the AZURE_STORAGE_CONNECTION_STRING environment variable.")
         st.stop()
     return AzureTableStorage(connection_string)
 
@@ -99,104 +98,110 @@ def main():
     api = init_sonarcloud_api()
     storage = init_azure_storage()
     
-    # Sidebar for controls
-    with st.sidebar:
-        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-wrench"></i> Controls</h2>', unsafe_allow_html=True)
-        
-       
-        organization = os.getenv("SONARCLOUD_ORG", "organization_key")
-        
-        # Date range selection
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-calendar"></i> Date Range</h3>', unsafe_allow_html=True)
-        date_range = st.selectbox(
-            "Select time period",
-            ["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year"]
-        )
-        
-        # Convert date range to days
-        days_map = {
-            "Last 7 days": 7,
-            "Last 30 days": 30,
-            "Last 90 days": 90,
-            "Last 6 months": 180,
-            "Last year": 365
-        }
-        days = days_map[date_range]
-
+    organization = os.getenv("SONARCLOUD_ORG", "organization_key")
     
-    # Fetch projects
+    # Fetch projects first so we can populate the UI
     with st.spinner("Loading projects..."):
         projects = fetch_projects(api, organization)
         
     if not projects:
         st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
         st.stop()
-    
-    # Project selection
+
+    # Sidebar for controls
     with st.sidebar:
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-building"></i> Project Selection</h3>', unsafe_allow_html=True)
+        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Helper function for rendering Iconoir labels
+        def render_icon_label(icon_class, text):
+            # Streamlit default label styling matching
+            st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; color: inherit; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</div>', unsafe_allow_html=True)
+
+        # Project selection is kept outside the form to enable dynamic cascading of branches.
+        render_icon_label("iconoir-building", "Project")
         selected_project = st.selectbox(
-            "Select a project to analyze",
+            "Project",
             options=[p['key'] for p in projects],
             format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
             key="project_selector",
             on_change=handle_project_change,
-            help="Switching projects will clear the current data cache to optimize memory."
+            help="Switching projects will clear the current data cache to optimize memory.",
+            label_visibility="collapsed"
         )
         
         if not selected_project:
             st.warning("Please select a project.")
             st.stop()
-        
-        # Get branches for the selected project
+            
+        # Dynamically get branches before building the form
         project_branches = fetch_project_branches(api, selected_project)
-        
-        # Branch filter with actual branches from the selected project
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-git-branch"></i> Branch Filter</h3>', unsafe_allow_html=True)
-        if project_branches:
-            branch_options = [b.get('name', 'Unknown') for b in project_branches]
-            branch_filter = st.selectbox(
-                "Select branch (required)",
-                options=branch_options,
-                help="You must select a branch to continue."
+        branch_options = [b.get('name', 'Unknown') for b in project_branches] if project_branches else []
+
+        # 1. Architectural Key: Wrap filters in a form to prevent premature reruns on these filters
+        with st.form(key="dashboard_controls_form", border=False):
+            
+            render_icon_label("iconoir-calendar", "Time Period")
+            date_range = st.selectbox(
+                "Time Period",
+                options=["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year"],
+                index=3,
+                label_visibility="collapsed"
             )
-            if not branch_filter:
-                st.warning("Please select a branch to continue.")
-                st.stop()
-        else:
-            branch_filter = st.text_input(
-            "Branch (required)",
-            value="",
-            help="No branches found. Enter branch name manually."
+            
+            render_icon_label("iconoir-git-branch", "Branch Filter")
+            if branch_options:
+                branch_filter = st.selectbox(
+                    "Branch Filter",
+                    options=branch_options,
+                    help="Select a branch to analyze.",
+                    label_visibility="collapsed"
+                )
+            else:
+                branch_filter = st.text_input(
+                    "Branch Filter",
+                    value="master",
+                    help="No branches found. Enter branch name manually.",
+                    label_visibility="collapsed"
+                )
+            
+            # Since buttons escape HTML, we use text-only string representing the action cleanly
+            st.markdown("<br>", unsafe_allow_html=True)
+            execute_analysis = st.form_submit_button(
+                "Load Dashboard", 
+                type="primary", 
+                use_container_width=True,
+                icon=":material/analytics:"
             )
-            if not branch_filter:
-                st.warning("Please enter a branch name to continue.")
-                st.stop()
+
+        # 4. Visually separate secondary administrative actions
+        st.divider()
         
-        # Execute Filter Button
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;"><i class="iconoir-search"></i> Execute Analysis</h3>', unsafe_allow_html=True)
-        execute_analysis = st.button(
-            "Load Data & Show Dashboard", 
-            type="primary",
-            help="Click to load data with selected filters and display dashboard",
-            use_container_width=True
-        )
+        st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 600;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
         
-        # Data Management Section (moved to bottom)
-        st.markdown('<br><h3 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;"><i class="iconoir-database-script"></i> Data Management</h3>', unsafe_allow_html=True)
-        
-        if st.button("Refresh Data", help="Clear cache and fetch fresh data from SonarCloud", use_container_width=True):
+        # Secondary button spanning full width
+        if st.button("Refresh Azure Data", type="secondary", use_container_width=True, icon=":material/sync:"):
             st.cache_data.clear()
             st.rerun()
             
         try:
             if storage:
                 stored_projects = storage.get_stored_projects()
-                st.caption(f"**{len(stored_projects)}** projects in Azure Storage.")
+                st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> <strong>{len(stored_projects)}</strong> projects in Azure Storage.</p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
             st.caption(f"Storage unavailable: {str(e)}")
+            
+    # Convert date range to days
+    days_map = {
+        "Last 7 days": 7,
+        "Last 30 days": 30,
+        "Last 90 days": 90,
+        "Last 6 months": 180,
+        "Last year": 365
+    }
+    days = days_map[date_range]
     
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
@@ -239,7 +244,7 @@ def main():
             st.write(f"Unique dates: {metrics_data['date'].nunique()}")
             
             byte_size = len(st.session_state.get('metrics_data_parquet', b''))
-            st.write(f"🗜️ **Parquet Compression Size:** {byte_size / 1024:.2f} KB in Session State")
+            st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
             st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
             st.dataframe(metrics_data.head())
             

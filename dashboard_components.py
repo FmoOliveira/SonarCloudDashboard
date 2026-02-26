@@ -570,7 +570,7 @@ def inject_statistical_anomalies(
                     line_width=2,
                     line_dash="dot",
                     line_color="rgba(229, 62, 62, 0.8)", # Warning red
-                    annotation_text=f"🚨 Statistical Anomaly",
+                    annotation_text=f"Statistical Anomaly",
                     annotation_position="top right",
                     annotation_font=dict(size=10, color="#FCA5A5")
                 )
