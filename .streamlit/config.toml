@@ -14,9 +14,6 @@ showWidgetBorder = true
 baseRadius = "0.3rem"
 buttonRadius = "full"
 font = "sans serif"
-headingFontWeights = [600, 500, 500, 500, 500, 500]
-headingFontSizes = ["3rem", "2.5rem", "2.25rem", "2rem", "1.5rem"]
-chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8"]
 
 [theme.sidebar]
 backgroundColor = "#121212"

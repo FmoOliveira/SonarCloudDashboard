@@ -3,6 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import io
 from datetime import datetime
 
 # Spotify-inspired Color Palette
@@ -570,3 +571,27 @@ def inject_statistical_anomalies(
                 flagged_dates.add(anomaly_date)
 
     return fig
+
+def compress_to_parquet(df: pd.DataFrame) -> bytes:
+    """
+    Serializes a Pandas DataFrame into a highly compressed Parquet byte array.
+    """
+    if df.empty:
+        return b""
+        
+    buffer = io.BytesIO()
+    
+    # PyArrow is the C++ backend that makes this execution lightning fast
+    df.to_parquet(buffer, engine='pyarrow', compression='snappy', index=False)
+    
+    return buffer.getvalue()
+
+def decompress_from_parquet(parquet_bytes: bytes) -> pd.DataFrame:
+    """
+    Deserializes a Parquet byte array back into a Pandas DataFrame.
+    """
+    if not parquet_bytes:
+        return pd.DataFrame()
+        
+    buffer = io.BytesIO(parquet_bytes)
+    return pd.read_parquet(buffer, engine='pyarrow')

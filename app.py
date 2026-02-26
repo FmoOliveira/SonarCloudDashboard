@@ -4,8 +4,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
+import gc
+import logging
 from sonarcloud_api import SonarCloudAPI
-from dashboard_components import create_metric_card, render_dynamic_subplots, render_area_chart, inject_statistical_anomalies
+from dashboard_components import (
+    create_metric_card, 
+    render_dynamic_subplots, 
+    render_area_chart, 
+    inject_statistical_anomalies,
+    compress_to_parquet,
+    decompress_from_parquet
+)
 from azure_storage import AzureTableStorage
 from dotenv import load_dotenv
 from ui_styles import inject_custom_css
@@ -29,6 +38,34 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def release_memory_safely(*session_keys: str) -> None:
+    """
+    Safely deletes large objects from the Streamlit session state and 
+    forces the OS to reclaim the memory immediately.
+    """
+    keys_deleted = False
+    
+    for key in session_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+            keys_deleted = True
+            
+    if keys_deleted:
+        reclaimed_objects = gc.collect()
+        logging.info(f"Memory cleanup triggered: Reclaimed {reclaimed_objects} objects.")
+
+def handle_project_change():
+    """
+    Callback triggered when the user changes the project dropdown.
+    """
+    # Purge heavy payload
+    release_memory_safely('metrics_data_parquet', 'data_project', 'data_branch', 'show_anomalies')
+    
+    # Reset metric multi-select
+    if 'metric_selector' in st.session_state:
+        st.session_state['metric_selector'] = ["vulnerabilities", "security_rating"]
+
 
 # Initialize SonarCloud API
 @st.cache_resource
@@ -101,7 +138,10 @@ def main():
         selected_project = st.selectbox(
             "Select a project to analyze",
             options=[p['key'] for p in projects],
-            format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x)
+            format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
+            key="project_selector",
+            on_change=handle_project_change,
+            help="Switching projects will clear the current data cache to optimize memory."
         )
         
         if not selected_project:
@@ -162,17 +202,23 @@ def main():
     if execute_analysis:
         # Fetch metrics for selected project
         with st.status("Fetching telemetry from SonarCloud...", expanded=True) as status:
-            metrics_data = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
-            if metrics_data.empty:
+            # Bypass Pickle and retrieve Parquet bytes directly from Streamlit Cache
+            compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+            if not compressed_bytes:
                 status.update(label="No metrics data available.", state="error", expanded=False)
                 st.stop()
-            status.update(label="Data successfully loaded!", state="complete", expanded=False)
-        st.session_state['metrics_data'] = metrics_data
-        st.session_state['data_project'] = selected_project
-        st.session_state['data_branch'] = branch_filter
+                
+            # Store directly in Session State for instantaneous page transitions
+            st.session_state['metrics_data_parquet'] = compressed_bytes
+            
+            st.session_state['data_project'] = selected_project
+            st.session_state['data_branch'] = branch_filter
+            status.update(label="Data successfully loaded and compressed!", state="complete", expanded=False)
         
-    # Use cached metrics_data if available
-    metrics_data = st.session_state.get('metrics_data', pd.DataFrame())
+    # Decompress only exactly when needed for the UI render
+    metrics_data = pd.DataFrame()
+    if 'metrics_data_parquet' in st.session_state:
+        metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
     
     if not metrics_data.empty:
         # Main dashboard content
@@ -187,12 +233,19 @@ def main():
         
         # Debug: Show data info at the bottom
         st.markdown('---')
-        with st.expander("Debug: Data Info"):
+        with st.expander("Debug: Data Info & Memory Footprint"):
             st.write(f"Total records: {len(metrics_data)}")
             st.write(f"Date range: {metrics_data['date'].min()} to {metrics_data['date'].max()}")
             st.write(f"Unique dates: {metrics_data['date'].nunique()}")
-            st.caption("Data has been aggregated by date - multiple records per day are averaged")
+            
+            byte_size = len(st.session_state.get('metrics_data_parquet', b''))
+            st.write(f"🗜️ **Parquet Compression Size:** {byte_size / 1024:.2f} KB in Session State")
+            st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
             st.dataframe(metrics_data.head())
+            
+        # Explicitly delete the ephemeral uncompressed dataframe from the local scope
+        del metrics_data
+        gc.collect()
     else:
         # Show instructions when no analysis is executed
         st.info("Select your filters in the sidebar and click 'Load Data & Show Dashboard' to begin analysis.")
@@ -294,8 +347,9 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return dict(zip(project_keys, results))
 
-def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
-    """Fetch metrics data for selected projects with Azure Table Storage integration"""
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
+    """Fetch historical metrics data using async endpoints and compress to Parquet bytes for caching"""
     all_data = []
     projects_to_fetch = []
     
@@ -309,14 +363,18 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                 if coverage_info["has_coverage"]:
                     stored_data = coverage_info.get("data", [])
                     if stored_data:
-                        st.toast(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})", icon="📦")
-                        all_data.extend(stored_data)
+                        logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
+                        # Data returned from storage may already be a list of dicts or a dataframe
+                        if isinstance(stored_data, pd.DataFrame):
+                            all_data.extend(stored_data.to_dict('records'))
+                        else:
+                            all_data.extend(stored_data)
                         need_fresh_data = False
                 else:
-                    st.toast(f"Fetching fresh data for {project_key}...", icon="🔄")
+                    logging.info(f"Fetching fresh data for {project_key}...")
                     
             except Exception as e:
-                st.toast(f"Storage check failed for {project_key}: {str(e)}", icon="⚠️")
+                logging.warning(f"Storage check failed for {project_key}: {str(e)}")
         
         if need_fresh_data:
              projects_to_fetch.append(project_key)
@@ -327,7 +385,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
         
         for project_key, result in raw_results.items():
             if isinstance(result, Exception):
-                st.error(f"Failed to fetch {project_key}: {str(result)}")
+                logging.error(f"Failed to fetch {project_key}: {str(result)}")
             else:
                 if result:
                     for r in result:
@@ -337,9 +395,9 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                             df_to_store = pd.DataFrame(result)
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
-                                st.toast(f"Stored {len(result)} new records for {project_key}", icon="✅")
+                                logging.info(f"Stored {len(result)} new records for {project_key}")
                         except Exception as e:
-                            st.toast(f"Could not store data for {project_key}: {str(e)}", icon="⚠️")
+                            logging.warning(f"Could not store data for {project_key}: {str(e)}")
                 else:
                     # Fallback to current measures if historical yields no data
                     try:
@@ -352,7 +410,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                                 df_to_store = pd.DataFrame([measures])
                                 _storage.store_metrics_data(df_to_store, project_key, branch)
                     except Exception as e:
-                        st.error(f"Fallback fetch failed for {project_key}: {str(e)}")
+                        logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
     
     df = pd.DataFrame(all_data)
     
@@ -392,7 +450,7 @@ def fetch_metrics_data(_api, project_keys, days, branch=None, _storage=None):
                 if col in df.columns:
                     df[col] = df[col].round(2)
     
-    return df if all_data else pd.DataFrame()
+    return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
 
 def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
