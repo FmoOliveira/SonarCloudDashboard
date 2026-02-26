@@ -59,32 +59,24 @@ def create_metric_card(title: str, value: str, icon_class: str, delta: str = Non
 
     delta_html = ""
     if delta:
-        safe_delta = html.escape(delta)
+        # Do not escape delta here, as it may contain safe backend-generated formatting
         safe_color = html.escape(delta_color)
-        delta_html = f"""
-        <div style="font-size: 0.85rem; color: {safe_color}; margin-top: 0.4rem; font-weight: 500;">
-            {safe_delta} <span style="color: #888888; font-weight: 400;">vs start</span>
-        </div>
-        """
+        delta_html = f"""<div style="font-size: 0.85rem; color: {safe_color}; margin-top: 0.4rem; font-weight: 500;">
+{delta} <span style="color: #888888; font-weight: 400;">vs start</span>
+</div>"""
 
     card_html = f"""
-    <div style="
-        background-color: #121212;
-        border: 1px solid #7c7c7c;
-        border-radius: 0.3rem;
-        padding: 1.2rem;
-        margin-bottom: 1rem;
-    ">
-        <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <i class="{safe_icon}" style="font-size: 1.2rem; color: #16a34a;"></i>
-            <span>{safe_title}</span>
-        </div>
-        <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
-            {safe_value}
-        </div>
-        {delta_html}
+<div style="background-color: #121212; border: 1px solid #7c7c7c; border-radius: 0.3rem; padding: 1.2rem; margin-bottom: 1rem;">
+    <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="{safe_icon}" style="font-size: 1.2rem; color: #16a34a;"></i>
+        <span>{safe_title}</span>
     </div>
-    """
+    <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
+        {safe_value}
+    </div>
+    {delta_html}
+</div>
+"""
     st.markdown(card_html, unsafe_allow_html=True)
 
 
