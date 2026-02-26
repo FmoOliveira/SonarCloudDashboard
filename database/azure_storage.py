@@ -116,19 +116,14 @@ class AzureTableStorage(StorageInterface):
                 batch_size = 100
                 for i in range(0, len(entities), batch_size):
                     batch = entities[i:i + batch_size]
+                    
+                    # Map entities to the transaction tuple format required by the Azure SDK
+                    operations = [("upsert", entity, {"mode": "replace"}) for entity in batch]
+                    
                     try:
-                        # Use create_entity for individual inserts to handle duplicates
-                        for entity in batch:
-                            try:
-                                self.table_client.create_entity(entity)
-                            except Exception:
-                                # If entity exists, update it
-                                try:
-                                    self.table_client.update_entity(entity, mode='replace')
-                                except Exception as update_error:
-                                    st.warning(f"Failed to store/update entity: {str(update_error)}")
+                        self.table_client.submit_transaction(operations)
                     except Exception as batch_error:
-                        st.error(f"Failed to store batch: {str(batch_error)}")
+                        st.error(f"Failed to store transaction batch: {str(batch_error)}")
                         return False
 
             # Update metadata partition
@@ -239,7 +234,7 @@ class AzureTableStorage(StorageInterface):
                 return {"has_coverage": False, "reason": "No date column in stored data"}
             
             # Convert dates and check coverage
-            df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce', utc=True)
+            df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
             df['date'] = df['date'].dt.tz_localize(None)
             latest_stored = df['date'].max()
             # oldest_stored = df['date'].min() # Unused

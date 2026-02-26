@@ -110,18 +110,11 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     )
     
     # Prepare data for plotting
-    plot_data = df.copy()
-    plot_data['project_name'] = plot_data['project_key'].map(project_names)
+    plot_data = df
     
     # Convert date column if it exists
     if 'date' in plot_data.columns:
-        try:
-            plot_data['date'] = pd.to_datetime(plot_data['date'], format='mixed', errors='coerce', utc=True)
-            plot_data['date'] = plot_data['date'].dt.tz_convert(None)
-            plot_data = plot_data.sort_values('date')
-        except Exception as e:
-            st.warning(f"Could not parse dates: {str(e)}")
-            return
+        plot_data = plot_data.sort_values('date')
     else:
         st.warning("No date information available for trend analysis.")
         return
@@ -289,15 +282,9 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
         ("rgba(237, 137, 54, 1.0)", "rgba(237, 137, 54, 0.25)")    # Warning Orange
     ]
 
-    plot_data = df.copy()
+    plot_data = df
     if date_col in plot_data.columns:
-        try:
-            plot_data[date_col] = pd.to_datetime(plot_data[date_col], format='mixed', errors='coerce', utc=True)
-            plot_data[date_col] = plot_data[date_col].dt.tz_convert(None)
-            plot_data = plot_data.sort_values(date_col)
-        except Exception as e:
-            st.warning(f"Could not parse dates: {str(e)}")
-            return
+        plot_data = plot_data.sort_values(date_col)
             
     # Calculate global max values to order traces Z-index correctly (Largest in back, smallest in front)
     try:

@@ -141,36 +141,36 @@ def main():
         project_branches = fetch_project_branches(api, selected_project)
         branch_options = [b.get('name', 'Unknown') for b in project_branches] if project_branches else []
 
-        render_icon_label("iconoir-calendar", "Time Period")
-        date_range = st.selectbox(
-            "Time Period",
-            options=["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year", "Custom range..."],
-            index=3,
-            label_visibility="collapsed"
-        )
-        
-        # --- Dedicated Custom Date Range State Outside Form ---
-        custom_days = None
-        if date_range == "Custom range...":
-            # Inject a secondary input field when 'Custom' is selected
-            date_vals = st.date_input(
-                "Select Date Range",
-                value=(datetime.now() - timedelta(days=30), datetime.now()),
-                max_value=datetime.now(),
-                label_visibility="collapsed"
-            )
-            
-            # Streamlit returns a tuple of (start_date, end_date) when multiple dates are selected
-            if isinstance(date_vals, tuple) and len(date_vals) == 2:
-                start_date, end_date = date_vals
-                custom_days = (datetime.now().date() - start_date).days
-                custom_days = max(1, custom_days) 
-            else:
-                custom_days = 30 
-
         # 1. Architectural Key: Wrap filters in a form to prevent premature reruns on these filters
         with st.form(key="dashboard_controls_form", border=False):
             
+            render_icon_label("iconoir-calendar", "Time Period")
+            date_range = st.selectbox(
+                "Time Period",
+                options=["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year", "Custom range..."],
+                index=3,
+                label_visibility="collapsed"
+            )
+            
+            # --- Dedicated Custom Date Range State ---
+            custom_days = None
+            if date_range == "Custom range...":
+                # Inject a secondary input field when 'Custom' is selected
+                date_vals = st.date_input(
+                    "Select Date Range",
+                    value=(datetime.now() - timedelta(days=30), datetime.now()),
+                    max_value=datetime.now(),
+                    label_visibility="collapsed"
+                )
+                
+                # Streamlit returns a tuple of (start_date, end_date) when multiple dates are selected
+                if isinstance(date_vals, tuple) and len(date_vals) == 2:
+                    start_date, end_date = date_vals
+                    custom_days = (datetime.now().date() - start_date).days
+                    custom_days = max(1, custom_days) 
+                else:
+                    custom_days = 30 
+                    
             render_icon_label("iconoir-git-branch", "Branch Filter")
             if branch_options:
                 branch_filter = st.selectbox(
@@ -501,7 +501,7 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
     # If we have data, aggregate multiple records per day
     if not df.empty and 'date' in df.columns:
         # Convert date column to datetime for proper grouping
-        df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce', utc=True)
+        df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
         df['date'] = df['date'].dt.tz_convert(None)
         
         # Group by project_key and date, then aggregate
@@ -541,6 +541,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     
     # Get project names mapping
     project_names = {p['key']: p['name'] for p in all_projects}
+    df['project_name'] = df['project_key'].map(project_names)
     
     # Overview metrics
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
