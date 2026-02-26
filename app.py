@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import gc
@@ -522,25 +521,71 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
+    def get_metric_stats(df, col, higher_is_better=False, is_percent=False):
+        """Helper to calculate current value and delta trend."""
+        if col not in df.columns:
+            return "0", None, None
+
+        df_sorted = df.sort_values('date')
+        if df_sorted.empty:
+            return "0", None, None
+
+        projects = df_sorted['project_key'].unique()
+        latest_val = 0.0
+        earliest_val = 0.0
+
+        for p in projects:
+            p_data = df_sorted[df_sorted['project_key'] == p]
+            if not p_data.empty:
+                latest_val += float(p_data.iloc[-1][col])
+                earliest_val += float(p_data.iloc[0][col])
+
+        is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
+        if is_avg_metric and len(projects) > 0:
+            latest_val /= len(projects)
+            earliest_val /= len(projects)
+
+        delta_val = latest_val - earliest_val
+
+        if is_percent:
+            val_str = f"{latest_val:.1f}%"
+        elif col in ['security_rating', 'reliability_rating']:
+             val_str = f"{latest_val:.1f}"
+        else:
+            val_str = f"{int(latest_val):,}"
+
+        if abs(delta_val) < 0.01:
+             delta_str = None
+             color = "#888888"
+        else:
+            # Format delta to 1 decimal place if float-like, or int if integer metric
+            delta_fmt = f"{int(delta_val):+d}" if not (is_percent or is_avg_metric) else f"{delta_val:+.1f}"
+            delta_str = f"{delta_fmt}{'%' if is_percent else ''}"
+
+            is_good = (delta_val < 0) if not higher_is_better else (delta_val > 0)
+            color = "#1db954" if is_good else "#e91429"
+
+        return val_str, delta_str, color
+
     with col1:
-        total_vulnerabilities = df['vulnerabilities'].fillna(0).astype(int).sum() if 'vulnerabilities' in df.columns else 0
-        create_metric_card("Vulnerabilities", str(total_vulnerabilities), "iconoir-shield-warning")
+        val, delta, color = get_metric_stats(df, 'vulnerabilities')
+        create_metric_card("Vulnerabilities", val, "iconoir-shield-warning", delta, color)
     
     with col2:
-        total_security_hotspots = df['security_hotspots'].fillna(0).astype(int).sum() if 'security_hotspots' in df.columns else 0
-        create_metric_card("Security Hotspots", str(total_security_hotspots), "iconoir-fire-flame")
+        val, delta, color = get_metric_stats(df, 'security_hotspots')
+        create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color)
     
     with col3:
-        sum_duplicated_density = df['duplicated_lines_density'].fillna(0).astype(float).sum() if 'duplicated_lines_density' in df.columns else 0
-        create_metric_card("Duplicated Lines", f"{sum_duplicated_density:.1f}%", "iconoir-page")
+        val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color)
     
     with col4:
-        avg_security_rating = df['security_rating'].fillna(0).astype(float).mean() if 'security_rating' in df.columns else 0
-        create_metric_card("Security Rating", f"{avg_security_rating:.1f}", "iconoir-lock")
+        val, delta, color = get_metric_stats(df, 'security_rating')
+        create_metric_card("Security Rating", val, "iconoir-lock", delta, color)
     
     with col5:
-        avg_reliability_rating = df['reliability_rating'].fillna(0).astype(float).mean() if 'reliability_rating' in df.columns else 0
-        create_metric_card("Reliability Rating", f"{avg_reliability_rating:.1f}", "iconoir-flash")
+        val, delta, color = get_metric_stats(df, 'reliability_rating')
+        create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color)
     
     # Detailed metrics charts
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
@@ -726,7 +771,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                     else:
                         # Handle integer columns
                         display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(int)
-                except Exception as e:
+                except Exception:
                     # If conversion fails, keep as string
                     display_data[col] = display_data[col].astype(str)
         
