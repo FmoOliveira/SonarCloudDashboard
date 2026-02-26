@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import io
+import html
 from datetime import datetime
 
 # Spotify-inspired Color Palette
@@ -52,7 +53,12 @@ def apply_modern_layout(fig):
 
 def create_metric_card(title: str, value: str, icon_class: str):
     """Create a metric card with title, value, and Iconoir icon"""
-    html = f"""
+    # Escape user inputs to prevent XSS
+    safe_title = html.escape(title)
+    safe_value = html.escape(value)
+    safe_icon = html.escape(icon_class)
+
+    card_html = f"""
     <div style="
         background-color: #121212;
         border: 1px solid #7c7c7c;
@@ -61,15 +67,15 @@ def create_metric_card(title: str, value: str, icon_class: str):
         margin-bottom: 1rem;
     ">
         <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <i class="{icon_class}" style="font-size: 1.2rem; color: #16a34a;"></i>
-            <span>{title}</span>
+            <i class="{safe_icon}" style="font-size: 1.2rem; color: #16a34a;"></i>
+            <span>{safe_title}</span>
         </div>
         <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
-            {value}
+            {safe_value}
         </div>
     </div>
     """
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(card_html, unsafe_allow_html=True)
 
 from plotly.subplots import make_subplots
 

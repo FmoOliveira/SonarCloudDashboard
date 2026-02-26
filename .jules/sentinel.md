@@ -71,3 +71,8 @@
 **Vulnerability:** The `METADATA_PROJECTS` partition used a sanitized `ProjectKey` as its `RowKey`. Because sanitization replaced special characters like `/` with `_`, different project keys (e.g. `project/A` and `project_A`) resulted in the same `RowKey`, causing one to overwrite the other in the index.
 **Learning:** Simple string sanitization (replacement) is lossy and reduces entropy, leading to collisions when used as a unique identifier.
 **Prevention:** Use a cryptographic hash (SHA-256) of the original value as the key when the original value cannot be used directly due to storage constraints. This ensures collision resistance while meeting character requirements.
+
+## 2026-03-06 - Streamlit Component XSS Prevention
+**Vulnerability:** The `create_metric_card` component constructed HTML using f-strings with unescaped input, and rendered it using `st.markdown(..., unsafe_allow_html=True)`. This created a potential XSS vector if any input was user-controlled.
+**Learning:** Streamlit's `unsafe_allow_html=True` is dangerous. Reusable UI components must treat all inputs as untrusted.
+**Prevention:** Explicitly escape all variable inputs using `html.escape()` before interpolating them into HTML strings intended for `unsafe_allow_html=True`.
