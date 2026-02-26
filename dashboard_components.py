@@ -59,10 +59,11 @@ def create_metric_card(title: str, value: str, icon_class: str, delta: str = Non
 
     delta_html = ""
     if delta:
-        # Do not escape delta here, as it may contain safe backend-generated formatting
+        # Escape delta to prevent XSS
+        safe_delta = html.escape(delta)
         safe_color = html.escape(delta_color)
         delta_html = f"""<div style="font-size: 0.85rem; color: {safe_color}; margin-top: 0.4rem; font-weight: 500;">
-{delta} <span style="color: #888888; font-weight: 400;">vs start</span>
+{safe_delta} <span style="color: #888888; font-weight: 400;">vs start</span>
 </div>"""
 
     card_html = f"""
