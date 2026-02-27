@@ -549,29 +549,43 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    def get_metric_stats(df, col, higher_is_better=False, is_percent=False):
-        """Helper to calculate current value and delta trend."""
-        if col not in df.columns:
-            return "0", None, None
+    # ⚡ Bolt Optimization: Vectorized Aggregation
+    # Instead of iterating through every project (O(N*M)) inside helper function,
+    # we sort once and group by project to get first/last values in O(N).
+    # This reduces complexity from O(M * N * log N) to O(N log N).
 
+    if not df.empty:
         df_sorted = df.sort_values('date')
-        if df_sorted.empty:
+        grouped = df_sorted.groupby('project_key')
+
+        # Select all potential numeric columns to aggregate in one pass
+        # This creates a DataFrame of first values and a DataFrame of last values
+        # indexed by project_key.
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        first_vals = grouped[numeric_cols].first()
+        last_vals = grouped[numeric_cols].last()
+    else:
+        first_vals = pd.DataFrame()
+        last_vals = pd.DataFrame()
+
+    def get_metric_stats(col, higher_is_better=False, is_percent=False):
+        """Helper to calculate current value and delta trend using pre-calculated aggregates."""
+        if col not in df.columns or df.empty:
             return "0", None, None
 
-        projects = df_sorted['project_key'].unique()
-        latest_val = 0.0
-        earliest_val = 0.0
-
-        for p in projects:
-            p_data = df_sorted[df_sorted['project_key'] == p]
-            if not p_data.empty:
-                latest_val += float(p_data.iloc[-1][col])
-                earliest_val += float(p_data.iloc[0][col])
+        # Calculate totals from the aggregated frames
+        latest_total = last_vals[col].sum()
+        earliest_total = first_vals[col].sum()
+        project_count = len(last_vals)
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
-        if is_avg_metric and len(projects) > 0:
-            latest_val /= len(projects)
-            earliest_val /= len(projects)
+
+        if is_avg_metric and project_count > 0:
+            latest_val = latest_total / project_count
+            earliest_val = earliest_total / project_count
+        else:
+            latest_val = latest_total
+            earliest_val = earliest_total
 
         delta_val = latest_val - earliest_val
 
@@ -596,23 +610,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         return val_str, delta_str, color
 
     with col1:
-        val, delta, color = get_metric_stats(df, 'vulnerabilities')
+        val, delta, color = get_metric_stats('vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = get_metric_stats(df, 'security_hotspots')
+        val, delta, color = get_metric_stats('security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = get_metric_stats('duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = get_metric_stats(df, 'security_rating')
+        val, delta, color = get_metric_stats('security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = get_metric_stats(df, 'reliability_rating')
+        val, delta, color = get_metric_stats('reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
