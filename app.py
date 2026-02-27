@@ -16,6 +16,7 @@ from dashboard_components import (
 )
 from database.factory import get_storage_client
 from ui_styles import inject_custom_css
+import sys
 import asyncio
 import aiohttp
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
@@ -95,21 +96,32 @@ def main():
     load_css("styles.css")
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
     st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin-top: -1.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-    #st.markdown("Monitor and analyze your organization's code quality metrics")
     
-    # Initialize API and storage
-    api = init_sonarcloud_api()
-    storage = init_storage_client()
+    # --- DEMO MODE INTERCEPT ---
+    is_demo_mode = "--demo-mode" in sys.argv
     
-    organization = get_secret("sonarcloud", "organization_key")
-    
-    # Fetch projects first so we can populate the UI
-    with st.spinner("Loading projects..."):
-        projects = fetch_projects(api, organization)
+    if is_demo_mode:
+        st.sidebar.warning("🛠️ Running in Offline Demo Mode. Data is synthetic.")
+        api = None
+        storage = None
+        organization = "demo-org"
+        projects = [
+            {"key": "demo-project-alpha", "name": "Frontend Web Application"},
+            {"key": "demo-project-beta", "name": "Backend Python API"},
+            {"key": "demo-project-gamma", "name": "Mobile iOS App"}
+        ]
+    else:
+        # Normal Execution Path
+        api = init_sonarcloud_api()
+        storage = init_storage_client()
+        organization = get_secret("sonarcloud", "organization_key")
         
-    if not projects:
-        st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
-        st.stop()
+        with st.spinner("Loading projects..."):
+            projects = fetch_projects(api, organization)
+            
+        if not projects:
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
+            st.stop()
 
     # Sidebar for controls
     with st.sidebar:
@@ -118,10 +130,8 @@ def main():
         
         # Helper function for rendering Iconoir labels
         def render_icon_label(icon_class, text):
-            # Streamlit default label styling matching
             st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; color: inherit; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</div>', unsafe_allow_html=True)
 
-        # Project selection is kept outside the form to enable dynamic cascading of branches.
         render_icon_label("iconoir-building", "Project")
         selected_project = st.selectbox(
             "Project",
@@ -137,8 +147,10 @@ def main():
             st.warning("Please select a project.")
             st.stop()
             
-        # Dynamically get branches before building the form
-        project_branches = fetch_project_branches(api, selected_project)
+        if is_demo_mode:
+            project_branches = [{"name": "main"}]
+        else:
+            project_branches = fetch_project_branches(api, selected_project)
         branch_options = [b.get('name', 'Unknown') for b in project_branches] if project_branches else []
 
         # 1. Architectural Key: Wrap filters in a form to prevent premature reruns on these filters
@@ -285,9 +297,31 @@ def main():
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
         # Fetch metrics for selected project
-        with st.status("Fetching telemetry from SonarCloud...", expanded=True) as status:
-            # Bypass Pickle and retrieve Parquet bytes directly from Streamlit Cache
-            compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+        with st.status("Loading telemetry...", expanded=True) as status:
+            if "--demo-mode" in sys.argv:
+                demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
+                if not os.path.exists(demo_path):
+                    st.error("Demo data not found. Please run `python demo/demo_generator.py` first.")
+                    st.stop()
+                
+                demo_df = pd.read_parquet(demo_path)
+                
+                # Filter mock data to match selections
+                demo_df = demo_df[demo_df['project_key'] == selected_project]
+                if branch_filter:
+                    demo_df = demo_df[demo_df['branch'] == branch_filter]
+                
+                # Apply date filtering
+                end_date = pd.to_datetime('today').tz_localize(None)
+                start_date = end_date - pd.Timedelta(days=days)
+                demo_df['date'] = pd.to_datetime(demo_df['date'], format='ISO8601', errors='coerce').dt.tz_localize(None)
+                
+                demo_df = demo_df[(demo_df['date'] >= start_date) & (demo_df['date'] <= end_date)].copy()
+                compressed_bytes = compress_to_parquet(demo_df) if not demo_df.empty else None
+            else:
+                # Bypass Pickle and retrieve Parquet bytes directly from Streamlit Cache
+                compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+                
             if not compressed_bytes:
                 status.update(label="No metrics data available.", state="error", expanded=False)
                 st.stop()
