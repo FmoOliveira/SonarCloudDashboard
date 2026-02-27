@@ -35,5 +35,81 @@ div.stButton>button[kind="primary"]:hover {
 div.block-container,
 div[data-testid="stAppViewBlockContainer"] {
   padding-top: 1rem !important;
-  padding-bottom: 2rem !important;
+}
+
+/* --- NEON DARK THEME --- */
+:root {
+  --neon-green: #00ff00;
+  --neon-orange: #ff8c00;
+  --neon-teal: #00ced1;
+  --neon-blue: #1e90ff;
+  --card-bg: #1e1e1e;
+}
+
+.neon-card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease-in-out;
+  height: 220px;
+  /* Fixed height strictly forces uniformity across all columns */
+}
+
+/* Base Neon Borders */
+.neon-card.neon-green {
+  border-color: rgba(0, 255, 0, 0.3);
+}
+
+.neon-card.neon-orange {
+  border-color: rgba(255, 140, 0, 0.3);
+}
+
+.neon-card.neon-teal {
+  border-color: rgba(0, 206, 209, 0.3);
+}
+
+.neon-card.neon-blue {
+  border-color: rgba(30, 144, 255, 0.3);
+}
+
+/* Hover Glow Effects */
+.neon-card.neon-green:hover {
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.4), inset 0 0 10px rgba(0, 255, 0, 0.1);
+  border-color: var(--neon-green);
+  transform: translateY(-2px);
+}
+
+.neon-card.neon-orange:hover {
+  box-shadow: 0 0 15px rgba(255, 140, 0, 0.4), inset 0 0 10px rgba(255, 140, 0, 0.1);
+  border-color: var(--neon-orange);
+  transform: translateY(-2px);
+}
+
+.neon-card.neon-teal:hover {
+  box-shadow: 0 0 15px rgba(0, 206, 209, 0.4), inset 0 0 10px rgba(0, 206, 209, 0.1);
+  border-color: var(--neon-teal);
+  transform: translateY(-2px);
+}
+
+.neon-card.neon-blue:hover {
+  box-shadow: 0 0 15px rgba(30, 144, 255, 0.4), inset 0 0 10px rgba(30, 144, 255, 0.1);
+  border-color: var(--neon-blue);
+  transform: translateY(-2px);
+}
+
+/* Sidebar Typography Overrides */
+[data-testid="stSidebarNav"] span,
+div[data-testid="stSidebar"] label {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #888888;
 }

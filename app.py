@@ -597,23 +597,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
     with col1:
         val, delta, color = get_metric_stats(df, 'vulnerabilities')
-        create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color)
+        create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
         val, delta, color = get_metric_stats(df, 'security_hotspots')
-        create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color)
+        create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
         val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
-        create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color)
+        create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
         val, delta, color = get_metric_stats(df, 'security_rating')
-        create_metric_card("Security Rating", val, "iconoir-lock", delta, color)
+        create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
         val, delta, color = get_metric_stats(df, 'reliability_rating')
-        create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color)
+        create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)

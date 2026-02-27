@@ -50,29 +50,33 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888"):
-    """Create a metric card with title, value, and Iconoir icon"""
+def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+    """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     # Escape user inputs to prevent XSS
     safe_title = html.escape(title)
     safe_value = html.escape(value)
     safe_icon = html.escape(icon_class)
+    safe_neon_class = html.escape(neon_class)
 
     delta_html = ""
     if delta:
         # Escape delta to prevent XSS
         safe_delta = html.escape(delta)
         safe_color = html.escape(delta_color)
-        delta_html = f"""<div style="font-size: 0.85rem; color: {safe_color}; margin-top: 0.4rem; font-weight: 500;">
-{safe_delta} <span style="color: #888888; font-weight: 400;">vs start</span>
+        delta_html = f"""
+<div style="font-size: 0.9rem; color: {safe_color}; margin-top: 0.6rem; font-weight: 500;">
+    {safe_delta} <span style="font-size: 0.8rem; color: #888888; font-weight: 400;">vs start</span>
 </div>"""
 
     card_html = f"""
-<div style="background-color: #121212; border: 1px solid #7c7c7c; border-radius: 0.3rem; padding: 1.2rem; margin-bottom: 1rem;">
-    <div style="color: #ffffff; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-        <i class="{safe_icon}" style="font-size: 1.2rem; color: #16a34a;"></i>
-        <span>{safe_title}</span>
+<div class="neon-card {safe_neon_class}">
+    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.8rem;">
+        <i class="{safe_icon}" style="font-size: 2.2rem; filter: drop-shadow(0 0 8px currentColor);"></i>
     </div>
-    <div style="color: #ffffff; font-size: 2rem; font-weight: bold;">
+    <div style="color: #e0e0e0; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; letter-spacing: 0.05em;">
+        {safe_title}
+    </div>
+    <div style="color: #ffffff; font-size: 2.5rem; font-weight: 700; line-height: 1;">
         {safe_value}
     </div>
     {delta_html}
@@ -277,9 +281,10 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     # The line remains 100% opaque (alpha=1.0) for crisp boundaries, 
     # while the fill is dropped to 25% (alpha=0.25) to allow background traces to bleed through.
     color_palette = [
-        ("rgba(49, 130, 206, 1.0)", "rgba(49, 130, 206, 0.25)"),   # Primary Blue
-        ("rgba(72, 187, 120, 1.0)", "rgba(72, 187, 120, 0.25)"),   # Success Green
-        ("rgba(237, 137, 54, 1.0)", "rgba(237, 137, 54, 0.25)")    # Warning Orange
+        ("rgba(0, 255, 0, 1.0)", "rgba(0, 255, 0, 0.15)"),         # Neon Green
+        ("rgba(255, 140, 0, 1.0)", "rgba(255, 140, 0, 0.15)"),     # Neon Orange
+        ("rgba(0, 206, 209, 1.0)", "rgba(0, 206, 209, 0.15)"),     # Neon Teal
+        ("rgba(30, 144, 255, 1.0)", "rgba(30, 144, 255, 0.15)")    # Neon Blue
     ]
 
     plot_data = df
@@ -317,7 +322,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
         hovermode="x unified", # Essential UX: Shows the exact values of obscured traces
         yaxis=dict(
             showgrid=True,
-            gridcolor='#2D3748', 
+            gridcolor='rgba(255, 255, 255, 0.05)', # Faint neon gridlines
             zeroline=False
         ),
         xaxis=dict(
@@ -326,13 +331,14 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
             type='date',
             tickformat="%Y-%m-%d"
         ),
-        margin=dict(l=10, r=10, t=40, b=20),
+        margin=dict(l=10, r=10, t=10, b=20),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.05,
+            y=1.02,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(color="#888888", size=12)
         )
     )
     
