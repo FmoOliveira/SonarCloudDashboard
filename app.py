@@ -90,12 +90,111 @@ def init_storage_client():
     """Dynamically initialize the configured database client via Factory"""
     return get_storage_client()
 
+from auth import get_auth_url, acquire_token_by_auth_code, logout
+
+import extra_streamlit_components as stx
+
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
 # Main app
 def main():
     inject_custom_css()
     load_css("styles.css")
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
-    st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+    
+    # Initialize Cookie Manager
+    cookie_manager = get_cookie_manager()
+    
+    # --- AUTHENTICATION INTERCEPT ---
+    # First, try to restore session state from cookies
+    if "auth_token" not in st.session_state:
+        stored_token = cookie_manager.get("auth_token")
+        stored_user = cookie_manager.get("user_info")
+        stored_photo = cookie_manager.get("user_photo")
+        
+        if stored_token and stored_user:
+            st.session_state["auth_token"] = stored_token
+            st.session_state["user_info"] = stored_user
+            if stored_photo:
+                st.session_state["user_photo"] = stored_photo
+    
+    if "auth_token" in st.session_state:
+        user_name = st.session_state.get("user_info", {}).get("name", "User")
+        initials = "".join([n[0] for n in user_name.split() if n])[:2].upper()
+        if not initials:
+            initials = "U"
+            
+        col1, col2 = st.columns([10, 1])
+        with col1:
+            st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 1rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+            
+        with col2:
+            photo_b64 = st.session_state.get("user_photo", "")
+            popover_label = f"👤 {user_name.split()[0]}" if user_name else "👤 Profile"
+            with st.popover(popover_label, use_container_width=True):
+                if photo_b64:
+                    st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
+                
+                st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
+                if st.button("Logout", use_container_width=True, type="primary"):
+                    logout()
+    else:
+        st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+    
+    
+    if "auth_token" not in st.session_state:
+        # Check if returning from Entra ID with an authorization code
+        query_params = st.query_params
+        if "code" in query_params:
+            auth_code = query_params["code"]
+            
+            with st.spinner("Authenticating with Microsoft Entra ID..."):
+                token_result = acquire_token_by_auth_code(auth_code)
+                
+                if "access_token" in token_result:
+                    # Store tokens in session state
+                    st.session_state["auth_token"] = token_result["access_token"]
+                    st.session_state["user_info"] = token_result.get("id_token_claims", {})
+                    
+                    # Store tokens into browser cookies (expire in 1 day for security)
+                    import datetime
+                    expires_at = datetime.datetime.now() + datetime.timedelta(days=1)
+                    cookie_manager.set("auth_token", st.session_state["auth_token"], expires_at=expires_at)
+                    cookie_manager.set("user_info", st.session_state["user_info"], expires_at=expires_at)
+                    
+                    # Fetch user photo
+                    from auth import get_user_photo
+                    photo_b64 = get_user_photo(token_result["access_token"])
+                    if photo_b64:
+                        st.session_state["user_photo"] = photo_b64
+                        cookie_manager.set("user_photo", photo_b64, expires_at=expires_at)
+                    
+                    # Clear query params to prevent re-authenticating with the same code
+                    st.query_params.clear()
+                    st.rerun()
+                else:
+                    error_desc = token_result.get("error_description", "Unknown error")
+                    st.error(f"Authentication failed: {error_desc}")
+                    st.stop()
+        else:
+            # Show login screen
+            st.markdown("### Authentication Required")
+            st.info("You must log in with your corporate account to access this dashboard.")
+            
+            auth_url = get_auth_url()
+            st.link_button(
+                "Login with Corporate AD", 
+                url=auth_url, 
+                type="primary", 
+                use_container_width=True
+            )
+            st.stop()
+            
+    # User is Authenticated, logout moved to upper right dropdown
     
     # --- DEMO MODE INTERCEPT ---
     is_demo_mode = "--demo-mode" in sys.argv
