@@ -42,10 +42,23 @@ class TestAzureStorageSanitization(unittest.TestCase):
             # Should be sanitized (e.g. replaced with '_')
             self.assertIn('_', partition_key)
             print(f"Sanitized PartitionKey: {partition_key}")
+        elif self.mock_table_client.submit_transaction.called:
+             # Check batch arguments
+             call_args = self.mock_table_client.submit_transaction.call_args
+             # call_args[0] is positional args. The first arg is 'operations'.
+             operations = call_args[0][0]
+             # operations is a list of tuples: ("upsert", entity, {"mode": "replace"})
+             for op in operations:
+                 entity = op[1]
+                 partition_key = entity['PartitionKey']
+                 # Should not contain '/'
+                 self.assertNotIn('/', partition_key)
+                 # Should be sanitized (e.g. replaced with '_')
+                 self.assertIn('_', partition_key)
         else:
             # Maybe update_entity was called? Or batch logic?
             # The code uses create_entity individually in a loop
-            self.fail("create_entity was not called")
+            self.fail("create_entity or submit_transaction was not called")
 
     def test_retrieve_metrics_data_sanitizes_partition_key(self):
         """Test that retrieve_metrics_data uses sanitized PartitionKey"""
