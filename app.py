@@ -793,7 +793,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             if col not in ['project_name', 'date', 'project_key', 'branch']:
                 try:
                     if 'rating' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(str)
+                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
+                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
                     elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
                         display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
                     else:
@@ -803,10 +804,82 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                     # If conversion fails, keep as string
                     display_data[col] = display_data[col].astype(str)
         
+        # Define visual configuration for dataframe columns
+        column_config = {
+            "date": st.column_config.DateColumn(
+                "Date",
+                format="YYYY-MM-DD",
+                width="medium"
+            ),
+            "project_name": st.column_config.TextColumn(
+                "Project",
+                width="medium"
+            ),
+            "branch": st.column_config.TextColumn(
+                "Branch",
+                width="small"
+            ),
+            "vulnerabilities": st.column_config.NumberColumn(
+                "Vulns",
+                help="Total number of vulnerabilities detected",
+                format="%d"
+            ),
+            "bugs": st.column_config.NumberColumn(
+                "Bugs",
+                help="Total number of bugs detected",
+                format="%d"
+            ),
+            "security_hotspots": st.column_config.NumberColumn(
+                "Hotspots",
+                help="Security hotspots requiring review",
+                format="%d"
+            ),
+            "code_smells": st.column_config.NumberColumn(
+                "Smells",
+                help="Code smells affecting maintainability",
+                format="%d"
+            ),
+            "coverage": st.column_config.ProgressColumn(
+                "Coverage",
+                help="Test coverage percentage",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "duplicated_lines_density": st.column_config.ProgressColumn(
+                "Duplication",
+                help="Percentage of duplicated lines",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "security_rating": st.column_config.NumberColumn(
+                "Sec Rating",
+                help="Security Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "reliability_rating": st.column_config.NumberColumn(
+                "Rel Rating",
+                help="Reliability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "sqale_rating": st.column_config.NumberColumn(
+                "Maint Rating",
+                help="Maintainability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+             "security_review_rating": st.column_config.NumberColumn(
+                "Rev Rating",
+                help="Security Review Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            )
+        }
+
         st.dataframe(
             display_data,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config=column_config
         )
         
         # Export functionality
