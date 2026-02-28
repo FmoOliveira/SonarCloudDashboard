@@ -32,9 +32,9 @@ class TestAzureStorageSanitization(unittest.TestCase):
         self.storage.store_metrics_data(df, project_key, branch)
 
         # Check create_entity call
-        if self.mock_table_client.create_entity.called:
-            call_args = self.mock_table_client.create_entity.call_args
-            entity = call_args[0][0]
+        if self.mock_table_client.submit_transaction.called:
+            call_args = self.mock_table_client.submit_transaction.call_args
+            entity = call_args[0][0][0][1]
             partition_key = entity['PartitionKey']
 
             # Should not contain '/'
@@ -45,7 +45,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         else:
             # Maybe update_entity was called? Or batch logic?
             # The code uses create_entity individually in a loop
-            self.fail("create_entity was not called")
+            self.fail("submit_transaction was not called")
 
     def test_retrieve_metrics_data_sanitizes_partition_key(self):
         """Test that retrieve_metrics_data uses sanitized PartitionKey"""
@@ -74,7 +74,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True
@@ -101,7 +101,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True
