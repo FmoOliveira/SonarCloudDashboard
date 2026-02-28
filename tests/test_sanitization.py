@@ -32,9 +32,10 @@ class TestAzureStorageSanitization(unittest.TestCase):
         self.storage.store_metrics_data(df, project_key, branch)
 
         # Check create_entity call
-        if self.mock_table_client.create_entity.called:
-            call_args = self.mock_table_client.create_entity.call_args
-            entity = call_args[0][0]
+        if self.mock_table_client.submit_transaction.called:
+            call_args = self.mock_table_client.submit_transaction.call_args
+            operations = call_args[0][0]
+            entity = operations[0][1]
             partition_key = entity['PartitionKey']
 
             # Should not contain '/'
@@ -45,7 +46,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         else:
             # Maybe update_entity was called? Or batch logic?
             # The code uses create_entity individually in a loop
-            self.fail("create_entity was not called")
+            self.fail("submit_transaction was not called")
 
     def test_retrieve_metrics_data_sanitizes_partition_key(self):
         """Test that retrieve_metrics_data uses sanitized PartitionKey"""

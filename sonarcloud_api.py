@@ -1,7 +1,6 @@
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import os
 from typing import List, Dict, Optional
 import streamlit as st
 

@@ -1,6 +1,7 @@
 import streamlit as st
 import msal
 import logging
+import requests
 
 def get_msal_client():
     """Initializes the MSAL Confidential Client Application using st.secrets."""
@@ -54,8 +55,6 @@ def acquire_token_by_auth_code(auth_code: str):
         redirect_uri=redirect_uri
     )
     return result
-
-import requests
 
 def get_user_photo(access_token: str) -> str:
     """Fetches the user's profile photo from Microsoft Graph API and returns it as a base64 string."""
