@@ -71,17 +71,13 @@ def get_user_photo(access_token: str) -> str:
         logging.warning(f"Failed to fetch user photo: {e}")
     return ""
 
-def logout():
-    """Clears the authentication from the session state and browser cookies."""
-    for key in ["auth_token", "user_info", "user_photo"]:
-        if key in st.session_state:
-            del st.session_state[key]
+def logout(cookies=None):
+    """Clears the authentication from cookies."""
+    if cookies is not None:
+        for key in ["auth_token", "user_info_name", "user_photo"]:
+            if key in cookies:
+                del cookies[key]
+        cookies.save()
             
-    import extra_streamlit_components as stx
-    cookie_manager = stx.CookieManager()
-    cookie_manager.delete("auth_token")
-    cookie_manager.delete("user_info")
-    cookie_manager.delete("user_photo")
-    
     st.info("You have been logged out.")
     st.rerun()

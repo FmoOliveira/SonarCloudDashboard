@@ -222,14 +222,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         showlegend=True,
-        hovermode="x unified",
-        legend=dict(
-             orientation="h",
-             yanchor="bottom",
-             y=1.05,
-             xanchor="center",
-             x=0.5
-        )
+        hovermode="x unified"
     )
 
     return fig
@@ -331,15 +324,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
             type='date',
             tickformat="%Y-%m-%d"
         ),
-        margin=dict(l=10, r=10, t=10, b=20),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="center",
-            x=0.5,
-            font=dict(color="#888888", size=12)
-        )
+        margin=dict(l=10, r=10, t=10, b=20)
     )
     
     return fig
