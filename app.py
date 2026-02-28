@@ -20,6 +20,8 @@ import sys
 import asyncio
 import aiohttp
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
+from auth import get_auth_url, acquire_token_by_auth_code, logout
+from streamlit_cookies_manager import CookieManager
 
 def load_css(file_name: str) -> None:
     """Reads a CSS file and injects it into the Streamlit DOM."""
@@ -89,10 +91,6 @@ def init_sonarcloud_api():
 def init_storage_client():
     """Dynamically initialize the configured database client via Factory"""
     return get_storage_client()
-
-from auth import get_auth_url, acquire_token_by_auth_code, logout
-
-from streamlit_cookies_manager import CookieManager
 
 # Main app
 def main():
@@ -682,14 +680,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             return "0", None, None
 
         projects = df_sorted['project_key'].unique()
-        latest_val = 0.0
-        earliest_val = 0.0
-
-        for p in projects:
-            p_data = df_sorted[df_sorted['project_key'] == p]
-            if not p_data.empty:
-                latest_val += float(p_data.iloc[-1][col])
-                earliest_val += float(p_data.iloc[0][col])
+        # Vectorized this calculation to reduce time complexity from O(M*N) to O(N) by eliminating the project iteration loop
+        grouped = df_sorted.groupby('project_key', observed=True)[col]
+        latest_val = float(grouped.last().astype(float).sum())
+        earliest_val = float(grouped.first().astype(float).sum())
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
         if is_avg_metric and len(projects) > 0:

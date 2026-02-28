@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
 # Import the module to patch the constant later
-import azure_storage
 from azure_storage import AzureTableStorage
 
 class TestResourceLimits(unittest.TestCase):

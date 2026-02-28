@@ -1,7 +1,6 @@
 import unittest
 from dashboard_components import create_metric_card
-import streamlit as st
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 class TestDashboardSecurity(unittest.TestCase):
     def test_metric_card_xss_prevention(self):
