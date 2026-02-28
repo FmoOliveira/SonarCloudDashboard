@@ -7,3 +7,9 @@ requests>=2.31.0
 aiohttp
 msal
 extra-streamlit-components
+numpy
+tenacity
+streamlit-cookies-manager
+urllib3
+pytest
+aioresponses

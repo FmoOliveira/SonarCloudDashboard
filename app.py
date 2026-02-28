@@ -158,32 +158,6 @@ def main():
         
         photo_b64 = cookies.get("user_photo") or ""
         popover_label = f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile"
-        
-        # Pull the popover completely out of the Streamlit responsive layout flow
-        # without using st.columns multiplier math
-        st.markdown("""
-            <div id='profile-popover-anchor'></div>
-            <style>
-                div[data-testid="stElementContainer"]:has(#profile-popover-anchor) + div[data-testid="stElementContainer"],
-                div.element-container:has(#profile-popover-anchor) + div.element-container {
-                    position: absolute;
-                    top: 2rem;
-                    right: 2rem;
-                    width: auto !important;
-                    z-index: 1000;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-        
-        with st.popover(popover_label):
-                if photo_b64:
-                    st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
-                
-                st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
-                if st.button("Logout", use_container_width=True, type="primary"):
-                    logout(cookies)
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
@@ -191,12 +165,13 @@ def main():
         st.info("You must log in with your corporate account to access this dashboard.")
         
         auth_url = get_auth_url()
-        st.link_button(
-            "Login with Corporate AD", 
-            url=auth_url, 
-            type="primary", 
-            use_container_width=True
-        )
+        with st.sidebar:
+            st.link_button(
+                "Login with Corporate AD", 
+                url=auth_url, 
+                type="primary", 
+                use_container_width=True
+            )
         st.stop()
             
     # User is Authenticated, logout moved to upper right dropdown
@@ -229,6 +204,16 @@ def main():
 
     # Sidebar for controls
     with st.sidebar:
+        with st.popover(popover_label):
+            if photo_b64:
+                st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
+            
+            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
+            if st.button("Logout", use_container_width=True, type="primary"):
+                logout(cookies)
+        
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
