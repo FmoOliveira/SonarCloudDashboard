@@ -685,21 +685,13 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         df_sorted = df.sort_values('date')
         grouped = df_sorted.groupby('project_key')
 
-        # Select all potential numeric columns to aggregate in one pass
-        # This creates a DataFrame of first values and a DataFrame of last values
-        # indexed by project_key.
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        first_vals = grouped[numeric_cols].first()
-        last_vals = grouped[numeric_cols].last()
-    else:
-        first_vals = pd.DataFrame()
-        last_vals = pd.DataFrame()
-
         projects = df_sorted['project_key'].unique()
-        # Vectorized this calculation to reduce time complexity from O(M*N) to O(N) by eliminating the project iteration loop
-        grouped = df_sorted.groupby('project_key', observed=True)[col]
-        latest_val = float(grouped.last().astype(float).sum())
-        earliest_val = float(grouped.first().astype(float).sum())
+
+        # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
+        # by eliminating the Python-level iteration and using underlying C extensions
+        grouped = df_sorted.groupby('project_key', sort=False)[col]
+        earliest_val = float(grouped.first().sum())
+        latest_val = float(grouped.last().sum())
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
 
