@@ -448,7 +448,7 @@ def main():
             byte_size = len(st.session_state.get('metrics_data_parquet', b''))
             st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
             st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
-            st.dataframe(metrics_data.head())
+            st.dataframe(metrics_data.head(), hide_index=True)
             
         # Explicitly delete the ephemeral uncompressed dataframe from the local scope
         del metrics_data
