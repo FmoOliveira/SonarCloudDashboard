@@ -682,14 +682,12 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             return "0", None, None
 
         projects = df_sorted['project_key'].unique()
-        latest_val = 0.0
-        earliest_val = 0.0
 
-        for p in projects:
-            p_data = df_sorted[df_sorted['project_key'] == p]
-            if not p_data.empty:
-                latest_val += float(p_data.iloc[-1][col])
-                earliest_val += float(p_data.iloc[0][col])
+        # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
+        # by eliminating the Python-level iteration and using underlying C extensions
+        grouped = df_sorted.groupby('project_key', sort=False)[col]
+        earliest_val = float(grouped.first().sum())
+        latest_val = float(grouped.last().sum())
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
         if is_avg_metric and len(projects) > 0:
