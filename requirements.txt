@@ -4,3 +4,12 @@ plotly>=5.18.0
 python-dotenv>=1.0.0
 azure-data-tables>=12.4.4
 requests>=2.31.0
+aiohttp
+msal
+extra-streamlit-components
+numpy
+tenacity
+streamlit-cookies-manager
+urllib3
+pytest
+aioresponses

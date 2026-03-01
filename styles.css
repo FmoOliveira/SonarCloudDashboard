@@ -30,11 +30,78 @@ div.stButton>button[kind="primary"]:hover {
   transform: translateY(-1px);
 }
 
-/* Reduce Streamlit's default massive top padding */
-/* Reduce Streamlit's default massive top padding */
+/* FORCE 20/80 Side-by-Side Flex Layout and Stop Horizontal Overflow forever */
+html,
+body,
+div[data-testid="stApp"],
+div[data-testid="stAppViewContainer"] {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+div[data-testid="stAppViewContainer"] {
+  display: grid !important;
+  grid-template-columns: auto 1fr !important;
+  align-items: stretch !important;
+}
+
+div[data-testid="stSidebar"] {
+  grid-column: 1 !important;
+}
+
+section.main,
+section[data-testid="stMain"] {
+  grid-column: 2 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+div[data-testid="stHorizontalBlock"],
+div[data-testid="stColumn"],
+div[data-testid="column"] {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
 div.block-container,
 div[data-testid="stAppViewBlockContainer"] {
   padding-top: 1rem !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+/* Ensure plotting components dynamically resize strictly within the container */
+.stPlotlyChart {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.stPlotlyChart>div {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+iframe[title="streamlit_plotly_events.streamlit_plotly_events"],
+.stPlotlyChart iframe {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Ensure dataframes can scroll internally instead of expanding the page */
+div[data-testid="stDataFrame"] {
+  max-width: 100% !important;
+  width: 100% !important;
 }
 
 /* --- NEON DARK THEME --- */
@@ -60,6 +127,10 @@ div[data-testid="stAppViewBlockContainer"] {
   transition: all 0.3s ease-in-out;
   height: 220px;
   /* Fixed height strictly forces uniformity across all columns */
+  min-width: 0;
+  /* Allow the flexbox to shrink past its content width */
+  word-wrap: break-word;
+  /* Force long titles to wrap instead of expanding container */
 }
 
 /* Base Neon Borders */

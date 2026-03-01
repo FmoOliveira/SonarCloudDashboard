@@ -90,12 +90,91 @@ def init_storage_client():
     """Dynamically initialize the configured database client via Factory"""
     return get_storage_client()
 
+from auth import get_auth_url, acquire_token_by_auth_code, logout
+
+from streamlit_cookies_manager import CookieManager
+
 # Main app
 def main():
     inject_custom_css()
     load_css("styles.css")
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
-    st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+    
+    # Initialize Cookie Manager directly (it handles duplicates internally)
+    cookies = CookieManager()
+    
+    if not cookies.ready():
+        st.spinner("Initializing session...")
+        st.stop()
+        
+    # Read auth state from persistent cookies directly
+    auth_token = cookies.get("auth_token")
+    
+    # Process login if returning from Entra ID
+    if not auth_token and "code" in st.query_params:
+        auth_code = st.query_params["code"]
+        st.query_params.clear()
+        
+        with st.spinner("Authenticating with Microsoft Entra ID..."):
+            token_result = acquire_token_by_auth_code(auth_code)
+            
+            if "access_token" in token_result:
+                
+                # Store tokens in persistent cookies
+                auth_token = token_result["access_token"]
+                cookies["auth_token"] = auth_token
+                
+                user_info = token_result.get("id_token_claims", {})
+                cookies["user_info_name"] = user_info.get("name", "User")
+                
+                # Fetch user photo
+                from auth import get_user_photo
+                photo_b64 = get_user_photo(auth_token)
+                if photo_b64:
+                    cookies["user_photo"] = photo_b64
+                    
+                # Save changes to browser storage
+                cookies.save()
+                
+                # DO NOT run st.rerun() here. Let the script cascade down to render the dashboard!
+            else:
+                error_desc = token_result.get("error_description", "Unknown error")
+                # If it's a code redemption error (e.g. AADSTS54005), silently rerun to show login screen
+                if "AADSTS54005" in error_desc:
+                    st.rerun()
+                else:
+                    st.error(f"Authentication failed: {error_desc}")
+                    st.stop()
+
+    # Cascade to rendering based on auth_token
+    if auth_token:
+        user_name = cookies.get("user_info_name") or "User"
+        initials = "".join([n[0] for n in user_name.split() if n])[:2].upper()
+        if not initials:
+            initials = "U"
+            
+        # Render the Dashboard Title with a floating right profile component
+        st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+        
+        photo_b64 = cookies.get("user_photo") or ""
+        popover_label = f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile"
+    else:
+        st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+        # Show login screen
+        st.markdown("### Authentication Required")
+        st.info("You must log in with your corporate account to access this dashboard.")
+        
+        auth_url = get_auth_url()
+        with st.sidebar:
+            st.link_button(
+                "Login with Corporate AD", 
+                url=auth_url, 
+                type="primary", 
+                use_container_width=True
+            )
+        st.stop()
+            
+    # User is Authenticated, logout moved to upper right dropdown
     
     # --- DEMO MODE INTERCEPT ---
     is_demo_mode = "--demo-mode" in sys.argv
@@ -125,6 +204,16 @@ def main():
 
     # Sidebar for controls
     with st.sidebar:
+        with st.popover(popover_label):
+            if photo_b64:
+                st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
+            
+            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
+            if st.button("Logout", use_container_width=True, type="primary"):
+                logout(cookies)
+        
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -359,7 +448,7 @@ def main():
             byte_size = len(st.session_state.get('metrics_data_parquet', b''))
             st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
             st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
-            st.dataframe(metrics_data.head())
+            st.dataframe(metrics_data.head(), hide_index=True)
             
         # Explicitly delete the ephemeral uncompressed dataframe from the local scope
         del metrics_data
@@ -583,29 +672,43 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    def get_metric_stats(df, col, higher_is_better=False, is_percent=False):
-        """Helper to calculate current value and delta trend."""
-        if col not in df.columns:
-            return "0", None, None
+    # ⚡ Bolt Optimization: Vectorized Aggregation
+    # Instead of iterating through every project (O(N*M)) inside helper function,
+    # we sort once and group by project to get first/last values in O(N).
+    # This reduces complexity from O(M * N * log N) to O(N log N).
 
+    if not df.empty:
         df_sorted = df.sort_values('date')
-        if df_sorted.empty:
+        grouped = df_sorted.groupby('project_key')
+
+        # Select all potential numeric columns to aggregate in one pass
+        # This creates a DataFrame of first values and a DataFrame of last values
+        # indexed by project_key.
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        first_vals = grouped[numeric_cols].first()
+        last_vals = grouped[numeric_cols].last()
+    else:
+        first_vals = pd.DataFrame()
+        last_vals = pd.DataFrame()
+
+    def get_metric_stats(col, higher_is_better=False, is_percent=False):
+        """Helper to calculate current value and delta trend using pre-calculated aggregates."""
+        if col not in df.columns or df.empty:
             return "0", None, None
 
-        projects = df_sorted['project_key'].unique()
-        latest_val = 0.0
-        earliest_val = 0.0
-
-        for p in projects:
-            p_data = df_sorted[df_sorted['project_key'] == p]
-            if not p_data.empty:
-                latest_val += float(p_data.iloc[-1][col])
-                earliest_val += float(p_data.iloc[0][col])
+        # Calculate totals from the aggregated frames
+        latest_total = last_vals[col].sum()
+        earliest_total = first_vals[col].sum()
+        project_count = len(last_vals)
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
-        if is_avg_metric and len(projects) > 0:
-            latest_val /= len(projects)
-            earliest_val /= len(projects)
+
+        if is_avg_metric and project_count > 0:
+            latest_val = latest_total / project_count
+            earliest_val = earliest_total / project_count
+        else:
+            latest_val = latest_total
+            earliest_val = earliest_total
 
         delta_val = latest_val - earliest_val
 
@@ -630,23 +733,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         return val_str, delta_str, color
 
     with col1:
-        val, delta, color = get_metric_stats(df, 'vulnerabilities')
+        val, delta, color = get_metric_stats('vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = get_metric_stats(df, 'security_hotspots')
+        val, delta, color = get_metric_stats('security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = get_metric_stats('duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = get_metric_stats(df, 'security_rating')
+        val, delta, color = get_metric_stats('security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = get_metric_stats(df, 'reliability_rating')
+        val, delta, color = get_metric_stats('reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
@@ -827,7 +930,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             if col not in ['project_name', 'date', 'project_key', 'branch']:
                 try:
                     if 'rating' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(str)
+                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
+                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
                     elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
                         display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
                     else:
@@ -837,10 +941,82 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                     # If conversion fails, keep as string
                     display_data[col] = display_data[col].astype(str)
         
+        # Define visual configuration for dataframe columns
+        column_config = {
+            "date": st.column_config.DateColumn(
+                "Date",
+                format="YYYY-MM-DD",
+                width="medium"
+            ),
+            "project_name": st.column_config.TextColumn(
+                "Project",
+                width="medium"
+            ),
+            "branch": st.column_config.TextColumn(
+                "Branch",
+                width="small"
+            ),
+            "vulnerabilities": st.column_config.NumberColumn(
+                "Vulns",
+                help="Total number of vulnerabilities detected",
+                format="%d"
+            ),
+            "bugs": st.column_config.NumberColumn(
+                "Bugs",
+                help="Total number of bugs detected",
+                format="%d"
+            ),
+            "security_hotspots": st.column_config.NumberColumn(
+                "Hotspots",
+                help="Security hotspots requiring review",
+                format="%d"
+            ),
+            "code_smells": st.column_config.NumberColumn(
+                "Smells",
+                help="Code smells affecting maintainability",
+                format="%d"
+            ),
+            "coverage": st.column_config.ProgressColumn(
+                "Coverage",
+                help="Test coverage percentage",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "duplicated_lines_density": st.column_config.ProgressColumn(
+                "Duplication",
+                help="Percentage of duplicated lines",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "security_rating": st.column_config.NumberColumn(
+                "Sec Rating",
+                help="Security Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "reliability_rating": st.column_config.NumberColumn(
+                "Rel Rating",
+                help="Reliability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "sqale_rating": st.column_config.NumberColumn(
+                "Maint Rating",
+                help="Maintainability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+             "security_review_rating": st.column_config.NumberColumn(
+                "Rev Rating",
+                help="Security Review Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            )
+        }
+
         st.dataframe(
             display_data,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config=column_config
         )
         
         # Export functionality
