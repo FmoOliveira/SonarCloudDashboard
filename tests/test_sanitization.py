@@ -31,11 +31,11 @@ class TestAzureStorageSanitization(unittest.TestCase):
         # Call the method
         self.storage.store_metrics_data(df, project_key, branch)
 
-        # Check submit_transaction call
+        # Check create_entity call
         if self.mock_table_client.submit_transaction.called:
             call_args = self.mock_table_client.submit_transaction.call_args
             operations = call_args[0][0]
-            entity = operations[0][1] # Get entity from the first operation
+            entity = operations[0][1]
             partition_key = entity['PartitionKey']
 
             # Should not contain '/'
@@ -57,6 +57,8 @@ class TestAzureStorageSanitization(unittest.TestCase):
                  # Should be sanitized (e.g. replaced with '_')
                  self.assertIn('_', partition_key)
         else:
+            # Maybe update_entity was called? Or batch logic?
+            # The code uses create_entity individually in a loop
             self.fail("submit_transaction was not called")
 
     def test_retrieve_metrics_data_sanitizes_partition_key(self):
