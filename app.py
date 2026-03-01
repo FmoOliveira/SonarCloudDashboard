@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import html
 from datetime import datetime, timedelta
 import os
 import gc
@@ -20,6 +21,8 @@ import sys
 import asyncio
 import aiohttp
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
+from auth import get_auth_url, acquire_token_by_auth_code, logout
+from streamlit_cookies_manager import CookieManager
 
 def load_css(file_name: str) -> None:
     """Reads a CSS file and injects it into the Streamlit DOM."""
@@ -90,10 +93,6 @@ def init_storage_client():
     """Dynamically initialize the configured database client via Factory"""
     return get_storage_client()
 
-from auth import get_auth_url, acquire_token_by_auth_code, logout
-
-from streamlit_cookies_manager import CookieManager
-
 # Main app
 def main():
     inject_custom_css()
@@ -153,11 +152,16 @@ def main():
         if not initials:
             initials = "U"
             
+        # Escape user input to prevent XSS
+        safe_user_name = html.escape(user_name)
+        safe_initials = html.escape(initials)
+        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+        safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
+
         # Render the Dashboard Title with a floating right profile component
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         
         photo_b64 = cookies.get("user_photo") or ""
-        popover_label = f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile"
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
@@ -204,13 +208,13 @@ def main():
 
     # Sidebar for controls
     with st.sidebar:
-        with st.popover(popover_label):
-            if photo_b64:
-                st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
+        with st.popover(safe_popover_label):
+            if safe_photo_b64:
+                st.markdown(f'<div style="text-align: center;"><img src="{safe_photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{safe_initials}</div></div>', unsafe_allow_html=True)
             
-            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
             if st.button("Logout", use_container_width=True, type="primary"):
                 logout(cookies)
         
@@ -448,7 +452,7 @@ def main():
             byte_size = len(st.session_state.get('metrics_data_parquet', b''))
             st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
             st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
-            st.dataframe(metrics_data.head())
+            st.dataframe(metrics_data.head(), hide_index=True)
             
         # Explicitly delete the ephemeral uncompressed dataframe from the local scope
         del metrics_data
@@ -672,14 +676,14 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    def get_metric_stats(df, col, higher_is_better=False, is_percent=False):
-        """Helper to calculate current value and delta trend."""
-        if col not in df.columns:
-            return "0", None, None
+    # ⚡ Bolt Optimization: Vectorized Aggregation
+    # Instead of iterating through every project (O(N*M)) inside helper function,
+    # we sort once and group by project to get first/last values in O(N).
+    # This reduces complexity from O(M * N * log N) to O(N log N).
 
+    if not df.empty:
         df_sorted = df.sort_values('date')
-        if df_sorted.empty:
-            return "0", None, None
+        grouped = df_sorted.groupby('project_key')
 
         projects = df_sorted['project_key'].unique()
 
@@ -690,9 +694,13 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         latest_val = float(grouped.last().sum())
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
-        if is_avg_metric and len(projects) > 0:
-            latest_val /= len(projects)
-            earliest_val /= len(projects)
+
+        if is_avg_metric and project_count > 0:
+            latest_val = latest_total / project_count
+            earliest_val = earliest_total / project_count
+        else:
+            latest_val = latest_total
+            earliest_val = earliest_total
 
         delta_val = latest_val - earliest_val
 
@@ -717,23 +725,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         return val_str, delta_str, color
 
     with col1:
-        val, delta, color = get_metric_stats(df, 'vulnerabilities')
+        val, delta, color = get_metric_stats('vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = get_metric_stats(df, 'security_hotspots')
+        val, delta, color = get_metric_stats('security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = get_metric_stats('duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = get_metric_stats(df, 'security_rating')
+        val, delta, color = get_metric_stats('security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = get_metric_stats(df, 'reliability_rating')
+        val, delta, color = get_metric_stats('reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
@@ -914,7 +922,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             if col not in ['project_name', 'date', 'project_key', 'branch']:
                 try:
                     if 'rating' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(str)
+                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
+                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
                     elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
                         display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
                     else:
@@ -924,10 +933,82 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                     # If conversion fails, keep as string
                     display_data[col] = display_data[col].astype(str)
         
+        # Define visual configuration for dataframe columns
+        column_config = {
+            "date": st.column_config.DateColumn(
+                "Date",
+                format="YYYY-MM-DD",
+                width="medium"
+            ),
+            "project_name": st.column_config.TextColumn(
+                "Project",
+                width="medium"
+            ),
+            "branch": st.column_config.TextColumn(
+                "Branch",
+                width="small"
+            ),
+            "vulnerabilities": st.column_config.NumberColumn(
+                "Vulns",
+                help="Total number of vulnerabilities detected",
+                format="%d"
+            ),
+            "bugs": st.column_config.NumberColumn(
+                "Bugs",
+                help="Total number of bugs detected",
+                format="%d"
+            ),
+            "security_hotspots": st.column_config.NumberColumn(
+                "Hotspots",
+                help="Security hotspots requiring review",
+                format="%d"
+            ),
+            "code_smells": st.column_config.NumberColumn(
+                "Smells",
+                help="Code smells affecting maintainability",
+                format="%d"
+            ),
+            "coverage": st.column_config.ProgressColumn(
+                "Coverage",
+                help="Test coverage percentage",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "duplicated_lines_density": st.column_config.ProgressColumn(
+                "Duplication",
+                help="Percentage of duplicated lines",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "security_rating": st.column_config.NumberColumn(
+                "Sec Rating",
+                help="Security Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "reliability_rating": st.column_config.NumberColumn(
+                "Rel Rating",
+                help="Reliability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "sqale_rating": st.column_config.NumberColumn(
+                "Maint Rating",
+                help="Maintainability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+             "security_review_rating": st.column_config.NumberColumn(
+                "Rev Rating",
+                help="Security Review Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            )
+        }
+
         st.dataframe(
             display_data,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config=column_config
         )
         
         # Export functionality
@@ -936,7 +1017,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             label="Download as CSV",
             data=csv,
             file_name=f"sonarcloud_metrics_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
+            mime="text/csv",
+            use_container_width=True,
+            icon=":material/download:",
+            help="Export the displayed metric details as a CSV file for external analysis."
         )
 
 def create_box_plot(df, metric, project_names):

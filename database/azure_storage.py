@@ -1,5 +1,6 @@
 import re
 import hashlib
+import logging
 from datetime import datetime
 from itertools import islice
 from azure.data.tables import TableServiceClient
@@ -123,7 +124,8 @@ class AzureTableStorage(StorageInterface):
                     try:
                         self.table_client.submit_transaction(operations)
                     except Exception as batch_error:
-                        st.error(f"Failed to store transaction batch: {str(batch_error)}")
+                        logging.error(f"Failed to store transaction batch: {str(batch_error)}")
+                        st.error("Failed to store transaction batch. An internal error occurred.")
                         return False
 
             # Update metadata partition
@@ -137,12 +139,14 @@ class AzureTableStorage(StorageInterface):
                     "LastUpdated": datetime.now().isoformat()
                 })
             except Exception as e:
-                st.warning(f"Failed to update project metadata: {str(e)}")
+                logging.warning(f"Failed to update project metadata: {str(e)}")
+                st.warning("Failed to update project metadata. An internal error occurred.")
 
             return True
             
         except Exception as e:
-            st.error(f"Failed to store metrics data: {str(e)}")
+            logging.error(f"Failed to store metrics data: {str(e)}")
+            st.error("Failed to store metrics data. An internal error occurred.")
             return False
     
     def retrieve_metrics_data(self, project_key: str, branch: Optional[str] = None, days: int = 30) -> List[Dict]:
@@ -215,7 +219,8 @@ class AzureTableStorage(StorageInterface):
             return results
             
         except Exception as e:
-            st.warning(f"Failed to retrieve metrics data: {str(e)}")
+            logging.warning(f"Failed to retrieve metrics data: {str(e)}")
+            st.warning("Failed to retrieve metrics data. An internal error occurred.")
             return []
     
     def check_data_coverage(self, project_key: str, branch: str = None, days: int = 30) -> Dict[str, any]:
@@ -353,12 +358,14 @@ class AzureTableStorage(StorageInterface):
                     "LastUpdated": datetime.now().isoformat()
                 })
             except Exception as backfill_error:
-                st.warning(f"Metadata backfill failed: {str(backfill_error)}")
+                logging.warning(f"Metadata backfill failed: {str(backfill_error)}")
+                st.warning("Metadata backfill failed. An internal error occurred.")
 
             return project_list
             
         except Exception as e:
-            st.warning(f"Failed to retrieve stored projects: {str(e)}")
+            logging.warning(f"Failed to retrieve stored projects: {str(e)}")
+            st.warning("Failed to retrieve stored projects. An internal error occurred.")
             return []
     
     def delete_project_data(self, project_key: str, branch: str = None) -> bool:
@@ -419,10 +426,12 @@ class AzureTableStorage(StorageInterface):
 
             except Exception as e:
                 # Log but don't fail
-                st.warning(f"Failed to cleanup metadata: {str(e)}")
+                logging.warning(f"Failed to cleanup metadata: {str(e)}")
+                st.warning("Failed to cleanup metadata. An internal error occurred.")
 
             return True
             
         except Exception as e:
-            st.error(f"Failed to delete project data: {str(e)}")
+            logging.error(f"Failed to delete project data: {str(e)}")
+            st.error("Failed to delete project data. An internal error occurred.")
             return False

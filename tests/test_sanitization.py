@@ -46,6 +46,19 @@ class TestAzureStorageSanitization(unittest.TestCase):
             # Should be sanitized (e.g. replaced with '_')
             self.assertIn('_', partition_key)
             print(f"Sanitized PartitionKey: {partition_key}")
+        elif self.mock_table_client.submit_transaction.called:
+             # Check batch arguments
+             call_args = self.mock_table_client.submit_transaction.call_args
+             # call_args[0] is positional args. The first arg is 'operations'.
+             operations = call_args[0][0]
+             # operations is a list of tuples: ("upsert", entity, {"mode": "replace"})
+             for op in operations:
+                 entity = op[1]
+                 partition_key = entity['PartitionKey']
+                 # Should not contain '/'
+                 self.assertNotIn('/', partition_key)
+                 # Should be sanitized (e.g. replaced with '_')
+                 self.assertIn('_', partition_key)
         else:
             self.fail("submit_transaction was not called")
 
@@ -76,7 +89,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True
@@ -103,7 +116,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True
