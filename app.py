@@ -938,7 +938,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             label="Download as CSV",
             data=csv,
             file_name=f"sonarcloud_metrics_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
+            mime="text/csv",
+            use_container_width=True,
+            icon=":material/download:",
+            help="Export the displayed metric details as a CSV file for external analysis."
         )
 
 def create_box_plot(df, metric, project_names):
