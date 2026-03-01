@@ -31,10 +31,11 @@ class TestAzureStorageSanitization(unittest.TestCase):
         # Call the method
         self.storage.store_metrics_data(df, project_key, branch)
 
-        # Check create_entity call
-        if self.mock_table_client.create_entity.called:
-            call_args = self.mock_table_client.create_entity.call_args
-            entity = call_args[0][0]
+        # Check submit_transaction call
+        if self.mock_table_client.submit_transaction.called:
+            call_args = self.mock_table_client.submit_transaction.call_args
+            operations = call_args[0][0]
+            entity = operations[0][1] # Get entity from the first operation
             partition_key = entity['PartitionKey']
 
             # Should not contain '/'
@@ -56,9 +57,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
                  # Should be sanitized (e.g. replaced with '_')
                  self.assertIn('_', partition_key)
         else:
-            # Maybe update_entity was called? Or batch logic?
-            # The code uses create_entity individually in a loop
-            self.fail("create_entity or submit_transaction was not called")
+            self.fail("submit_transaction was not called")
 
     def test_retrieve_metrics_data_sanitizes_partition_key(self):
         """Test that retrieve_metrics_data uses sanitized PartitionKey"""
@@ -87,7 +86,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True
@@ -114,7 +113,7 @@ class TestAzureStorageSanitization(unittest.TestCase):
         for call_args in self.mock_table_client.query_entities.call_args_list:
             query_filter = call_args.kwargs.get('query_filter')
             if not query_filter and len(call_args[0]) > 0:
-                query_filter = call_args[0][0]
+                query_filter = call_args[0][0][0][1]
 
             if "PartitionKey eq @pk" in query_filter and "ProjectKey eq @project_key" in query_filter:
                 found_call = True

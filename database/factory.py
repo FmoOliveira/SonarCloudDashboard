@@ -42,7 +42,7 @@ def get_storage_client() -> StorageInterface | None:
         st.stop()
     except Exception as e:
         logging.critical(f"Database Factory Initialization Error: {str(e)}")
-        st.error(f"Database Initialization Error: {str(e)}", icon="🚨")
+        st.error("Database Initialization Error: An internal system error occurred.", icon="🚨")
         st.stop()
         
     return None
