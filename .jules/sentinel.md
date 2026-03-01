@@ -76,3 +76,8 @@
 **Vulnerability:** The `create_metric_card` component constructed HTML using f-strings with unescaped input, and rendered it using `st.markdown(..., unsafe_allow_html=True)`. This created a potential XSS vector if any input was user-controlled.
 **Learning:** Streamlit's `unsafe_allow_html=True` is dangerous. Reusable UI components must treat all inputs as untrusted.
 **Prevention:** Explicitly escape all variable inputs using `html.escape()` before interpolating them into HTML strings intended for `unsafe_allow_html=True`.
+
+## 2026-03-07 - Sensitive Information Leakage
+**Vulnerability:** Internal system errors, such as database connection string errors and underlying Azure Table Storage SDK exceptions `str(e)`, were being directly rendered to the frontend via Streamlit's `st.error` UI elements.
+**Learning:** Exposing raw backend exception messages provides potential attackers with deep insight into the internal infrastructure, database schema, and potential entry points.
+**Prevention:** Use generic, safe error messages for user-facing UI elements (e.g., "An internal error occurred"), while securely logging the exact detailed exception object to backend systems using the `logging` module.
