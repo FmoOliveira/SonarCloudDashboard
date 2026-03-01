@@ -672,29 +672,43 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    def get_metric_stats(df, col, higher_is_better=False, is_percent=False):
-        """Helper to calculate current value and delta trend."""
-        if col not in df.columns:
-            return "0", None, None
+    # ⚡ Bolt Optimization: Vectorized Aggregation
+    # Instead of iterating through every project (O(N*M)) inside helper function,
+    # we sort once and group by project to get first/last values in O(N).
+    # This reduces complexity from O(M * N * log N) to O(N log N).
 
+    if not df.empty:
         df_sorted = df.sort_values('date')
-        if df_sorted.empty:
+        grouped = df_sorted.groupby('project_key')
+
+        # Select all potential numeric columns to aggregate in one pass
+        # This creates a DataFrame of first values and a DataFrame of last values
+        # indexed by project_key.
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        first_vals = grouped[numeric_cols].first()
+        last_vals = grouped[numeric_cols].last()
+    else:
+        first_vals = pd.DataFrame()
+        last_vals = pd.DataFrame()
+
+    def get_metric_stats(col, higher_is_better=False, is_percent=False):
+        """Helper to calculate current value and delta trend using pre-calculated aggregates."""
+        if col not in df.columns or df.empty:
             return "0", None, None
 
-        projects = df_sorted['project_key'].unique()
-        latest_val = 0.0
-        earliest_val = 0.0
-
-        for p in projects:
-            p_data = df_sorted[df_sorted['project_key'] == p]
-            if not p_data.empty:
-                latest_val += float(p_data.iloc[-1][col])
-                earliest_val += float(p_data.iloc[0][col])
+        # Calculate totals from the aggregated frames
+        latest_total = last_vals[col].sum()
+        earliest_total = first_vals[col].sum()
+        project_count = len(last_vals)
 
         is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
-        if is_avg_metric and len(projects) > 0:
-            latest_val /= len(projects)
-            earliest_val /= len(projects)
+
+        if is_avg_metric and project_count > 0:
+            latest_val = latest_total / project_count
+            earliest_val = earliest_total / project_count
+        else:
+            latest_val = latest_total
+            earliest_val = earliest_total
 
         delta_val = latest_val - earliest_val
 
@@ -719,23 +733,23 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         return val_str, delta_str, color
 
     with col1:
-        val, delta, color = get_metric_stats(df, 'vulnerabilities')
+        val, delta, color = get_metric_stats('vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = get_metric_stats(df, 'security_hotspots')
+        val, delta, color = get_metric_stats('security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = get_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = get_metric_stats('duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = get_metric_stats(df, 'security_rating')
+        val, delta, color = get_metric_stats('security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = get_metric_stats(df, 'reliability_rating')
+        val, delta, color = get_metric_stats('reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
@@ -916,7 +930,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             if col not in ['project_name', 'date', 'project_key', 'branch']:
                 try:
                     if 'rating' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(str)
+                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
+                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
                     elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
                         display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
                     else:
@@ -926,10 +941,82 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                     # If conversion fails, keep as string
                     display_data[col] = display_data[col].astype(str)
         
+        # Define visual configuration for dataframe columns
+        column_config = {
+            "date": st.column_config.DateColumn(
+                "Date",
+                format="YYYY-MM-DD",
+                width="medium"
+            ),
+            "project_name": st.column_config.TextColumn(
+                "Project",
+                width="medium"
+            ),
+            "branch": st.column_config.TextColumn(
+                "Branch",
+                width="small"
+            ),
+            "vulnerabilities": st.column_config.NumberColumn(
+                "Vulns",
+                help="Total number of vulnerabilities detected",
+                format="%d"
+            ),
+            "bugs": st.column_config.NumberColumn(
+                "Bugs",
+                help="Total number of bugs detected",
+                format="%d"
+            ),
+            "security_hotspots": st.column_config.NumberColumn(
+                "Hotspots",
+                help="Security hotspots requiring review",
+                format="%d"
+            ),
+            "code_smells": st.column_config.NumberColumn(
+                "Smells",
+                help="Code smells affecting maintainability",
+                format="%d"
+            ),
+            "coverage": st.column_config.ProgressColumn(
+                "Coverage",
+                help="Test coverage percentage",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "duplicated_lines_density": st.column_config.ProgressColumn(
+                "Duplication",
+                help="Percentage of duplicated lines",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
+            "security_rating": st.column_config.NumberColumn(
+                "Sec Rating",
+                help="Security Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "reliability_rating": st.column_config.NumberColumn(
+                "Rel Rating",
+                help="Reliability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+            "sqale_rating": st.column_config.NumberColumn(
+                "Maint Rating",
+                help="Maintainability Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            ),
+             "security_review_rating": st.column_config.NumberColumn(
+                "Rev Rating",
+                help="Security Review Rating (1=A, 5=E). Lower is better.",
+                format="%.1f"
+            )
+        }
+
         st.dataframe(
             display_data,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config=column_config
         )
         
         # Export functionality
