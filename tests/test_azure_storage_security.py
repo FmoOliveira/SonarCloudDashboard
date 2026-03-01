@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta
 from azure_storage import AzureTableStorage
 
 class TestAzureStorageSecurity(unittest.TestCase):

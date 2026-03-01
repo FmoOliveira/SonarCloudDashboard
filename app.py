@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import html
 from datetime import datetime, timedelta
 import os
 import gc
@@ -153,11 +154,16 @@ def main():
         if not initials:
             initials = "U"
             
+        # Escape user input to prevent XSS
+        safe_user_name = html.escape(user_name)
+        safe_initials = html.escape(initials)
+        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+        safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
+
         # Render the Dashboard Title with a floating right profile component
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         
         photo_b64 = cookies.get("user_photo") or ""
-        popover_label = f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile"
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
@@ -204,13 +210,13 @@ def main():
 
     # Sidebar for controls
     with st.sidebar:
-        with st.popover(popover_label):
-            if photo_b64:
-                st.markdown(f'<div style="text-align: center;"><img src="{photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
+        with st.popover(safe_popover_label):
+            if safe_photo_b64:
+                st.markdown(f'<div style="text-align: center;"><img src="{safe_photo_b64}" style="width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{initials}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, #1db954, #1ed760); color: white; display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">{safe_initials}</div></div>', unsafe_allow_html=True)
             
-            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{user_name}</strong></p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
             if st.button("Logout", use_container_width=True, type="primary"):
                 logout(cookies)
         
