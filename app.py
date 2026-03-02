@@ -1,4 +1,14 @@
 import streamlit as st
+
+# Backward-compatibility monkey-patch for unmaintained third-party plugins using deprecated st.cache
+if hasattr(st, 'cache'):
+    def _safe_cache(*args, **kwargs):
+        # Remove legacy arguments that crash st.cache_data
+        kwargs.pop('suppress_st_warning', None)
+        kwargs.pop('allow_output_mutation', None)
+        kwargs.pop('hash_funcs', None)
+        return st.cache_data(*args, **kwargs)
+    st.cache = _safe_cache
 import pandas as pd
 import plotly.express as px
 import html
@@ -1218,7 +1228,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         
         # Add branch column if available
         if 'branch' in display_data.columns:
-            display_data['branch'] = display_data['branch'].fillna("").astype(str)
+            display_data['branch'] = display_data['branch'].astype(object).fillna("").astype(str)
         else:
             # Use the selected branch from the sidebar if available, otherwise empty string
             display_data['branch'] = branch_filter if branch_filter else ""

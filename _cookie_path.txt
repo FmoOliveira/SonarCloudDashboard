@@ -1,0 +1,1 @@
+C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit_cookies_manager\__init__.py
