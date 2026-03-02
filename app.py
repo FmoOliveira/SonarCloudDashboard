@@ -663,6 +663,53 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
     
     return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
 
+def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
+    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+        return ("0.0%" if is_percent else "0", None, "#888888")
+    
+    df_sorted = df.sort_values('date')
+    
+    # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
+    # by eliminating the Python-level iteration and using underlying C extensions
+    grouped = df_sorted.groupby('project_key', sort=False)[metric_col]
+    earliest_total = float(grouped.first().sum())
+    latest_total = float(grouped.last().sum())
+    project_count = grouped.ngroups
+    
+    is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
+    
+    if is_avg_metric and project_count > 0:
+        latest_val = latest_total / project_count
+        earliest_val = earliest_total / project_count
+    else:
+        latest_val = latest_total
+        earliest_val = earliest_total
+    
+    delta_val = latest_val - earliest_val
+    
+    if is_percent:
+        val_str = f"{latest_val:.1f}%"
+    elif metric_col in ['security_rating', 'reliability_rating']:
+         val_str = f"{latest_val:.1f}"
+    else:
+        val_str = f"{int(latest_val):,}"
+    
+    if abs(delta_val) < 0.01:
+         delta_str = None
+         color = "#888888"
+    else:
+        # Format delta to 1 decimal place if float-like, or int if integer metric
+        delta_fmt = f"{int(delta_val):+d}" if not (is_percent or is_avg_metric) else f"{delta_val:+.1f}"
+        delta_str = f"{delta_fmt}{'%' if is_percent else ''}"
+        
+        is_good = (delta_val < 0) if not higher_is_better else (delta_val > 0)
+        color = "#1db954" if is_good else "#e91429"
+    
+    return val_str, delta_str, color
+
+def get_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
+    return compute_metric_stats(df, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
+
 def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
     
@@ -681,67 +728,25 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     # we sort once and group by project to get first/last values in O(N).
     # This reduces complexity from O(M * N * log N) to O(N log N).
 
-    if not df.empty:
-        df_sorted = df.sort_values('date')
-        grouped = df_sorted.groupby('project_key')
-
-        projects = df_sorted['project_key'].unique()
-
-        # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
-        # by eliminating the Python-level iteration and using underlying C extensions
-        grouped = df_sorted.groupby('project_key', sort=False)[col]
-        earliest_val = float(grouped.first().sum())
-        latest_val = float(grouped.last().sum())
-
-        is_avg_metric = col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
-
-        if is_avg_metric and project_count > 0:
-            latest_val = latest_total / project_count
-            earliest_val = earliest_total / project_count
-        else:
-            latest_val = latest_total
-            earliest_val = earliest_total
-
-        delta_val = latest_val - earliest_val
-
-        if is_percent:
-            val_str = f"{latest_val:.1f}%"
-        elif col in ['security_rating', 'reliability_rating']:
-             val_str = f"{latest_val:.1f}"
-        else:
-            val_str = f"{int(latest_val):,}"
-
-        if abs(delta_val) < 0.01:
-             delta_str = None
-             color = "#888888"
-        else:
-            # Format delta to 1 decimal place if float-like, or int if integer metric
-            delta_fmt = f"{int(delta_val):+d}" if not (is_percent or is_avg_metric) else f"{delta_val:+.1f}"
-            delta_str = f"{delta_fmt}{'%' if is_percent else ''}"
-
-            is_good = (delta_val < 0) if not higher_is_better else (delta_val > 0)
-            color = "#1db954" if is_good else "#e91429"
-
-        return val_str, delta_str, color
 
     with col1:
-        val, delta, color = get_metric_stats('vulnerabilities')
+        val, delta, color = compute_metric_stats(df, 'vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = get_metric_stats('security_hotspots')
+        val, delta, color = compute_metric_stats(df, 'security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = get_metric_stats('duplicated_lines_density', is_percent=True)
+        val, delta, color = compute_metric_stats(df, 'duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = get_metric_stats('security_rating')
+        val, delta, color = compute_metric_stats(df, 'security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = get_metric_stats('reliability_rating')
+        val, delta, color = compute_metric_stats(df, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts

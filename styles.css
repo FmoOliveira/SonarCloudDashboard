@@ -16,6 +16,13 @@ span[data-baseweb="tag"] span {
   font-weight: 500;
 }
 
+html,
+body,
+div[data-testid="stApp"] {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Targeting specific button behaviors (Optional Polish)
   Adding transition smoothing and hover state drop-shadows to primary buttons.
 */
@@ -43,7 +50,7 @@ div[data-testid="stAppViewContainer"] {
 
 div[data-testid="stAppViewContainer"] {
   display: grid !important;
-  grid-template-columns: auto 1fr !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
   align-items: stretch !important;
 }
 
@@ -56,7 +63,7 @@ section[data-testid="stMain"] {
   grid-column: 2 !important;
   min-width: 0 !important;
   max-width: 100% !important;
-  width: 100% !important;
+  width: auto !important;
   margin-left: 0 !important;
   margin-right: 0 !important;
   box-sizing: border-box !important;

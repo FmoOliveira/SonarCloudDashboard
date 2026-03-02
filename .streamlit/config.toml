@@ -13,7 +13,7 @@ borderColor = "#7c7c7c"
 showWidgetBorder = true
 baseRadius = "0.3rem"
 buttonRadius = "full"
-font = "sans serif"
+font = "Inter"
 
 [theme.sidebar]
 backgroundColor = "#121212"
