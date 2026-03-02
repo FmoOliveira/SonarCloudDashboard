@@ -10,7 +10,8 @@ def get_msal_client():
         client_id = st.secrets["azure_ad"]["client_id"]
         client_secret = st.secrets["azure_ad"]["client_secret"]
     except KeyError as e:
-        st.error(f"Missing Azure AD configuration in `.streamlit/secrets.toml`: {e}", icon="🚨")
+        logging.error(f"Missing Azure AD configuration in `.streamlit/secrets.toml`: {e}")
+        st.error("Missing Azure AD configuration in `.streamlit/secrets.toml`.", icon="🚨")
         st.stop()
 
     authority = f"https://login.microsoftonline.com/{tenant_id}"
