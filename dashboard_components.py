@@ -49,7 +49,7 @@ def apply_modern_layout(fig):
         gridwidth=1,
         gridcolor=grid_color,
         tickfont=dict(color=font_color),
-        titlefont=dict(color=font_color),
+        title_font=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -59,7 +59,7 @@ def apply_modern_layout(fig):
         gridwidth=1,
         gridcolor=grid_color,
         tickfont=dict(color=font_color),
-        titlefont=dict(color=font_color),
+        title_font=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -210,7 +210,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
             
             # Dynamic Y-axis scaling per subplot
             y_title = "Percentage %" if "density" in metric or "coverage" in metric else "Count"
-            fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, gridcolor='#2D3748', zeroline=False)
+            fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, zeroline=False)
 
     # Compute exact layout updates for every subplot X-axis to force Date continuity 
     # instead of categorical string fallbacks for Bar charts
@@ -234,12 +234,11 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         barmode='group' if chart_type == "Bar Chart" else None,
         margin=dict(l=20, r=20, t=60, b=20),
         **xaxis_updates,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
         showlegend=True,
         hovermode="x unified"
     )
 
+    fig = apply_modern_layout(fig)
     return fig
 
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
@@ -342,6 +341,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
         margin=dict(l=10, r=10, t=10, b=20)
     )
     
+    fig = apply_modern_layout(fig)
     return fig
 
 def create_rating_gauge(rating_value: float, title: str):

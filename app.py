@@ -168,30 +168,56 @@ def apply_theme_overrides() -> None:
             }
             
             /* BaseWeb Dropdown Menus (Rendered outside main DOM context) */
+            div[data-baseweb="popover"],
+            div[data-baseweb="popover"] > div {
+                background-color: #FFFFFF !important;
+            }
             div[data-baseweb="popover"] ul[role="listbox"],
-            div[data-baseweb="popover"] div[role="listbox"] {
+            div[data-baseweb="popover"] div[role="listbox"],
+            div[data-baseweb="popover"] li[role="option"],
+            ul[data-testid="stSelectboxVirtualDropdownEmpty"] {
                 background-color: #FFFFFF !important;
                 color: #1A1814 !important;
             }
-            div[data-baseweb="popover"] li[role="option"] {
+            ul[data-testid="stSelectboxVirtualDropdownEmpty"] li {
                 background-color: #FFFFFF !important;
-                color: #1A1814 !important;
+                color: #8C8A86 !important;
             }
             div[data-baseweb="popover"] li[role="option"]:hover,
             div[data-baseweb="popover"] li[aria-selected="true"] {
                 background-color: #F4F3EF !important;
                 color: #2563EB !important;
             }
+            div[data-baseweb="popover"] p,
+            div[data-baseweb="popover"] span,
+            div[data-baseweb="popover"] div {
+                color: #1A1814 !important;
+            }
 
             /* Buttons & Download CSV */
             div[data-testid="stButton"] > button,
-            div[data-testid="stDownloadButton"] > button {
+            div[data-testid="stDownloadButton"] > button,
+            div[data-testid="stForm"] button,
+            button[data-testid="stBaseButton-secondary"] {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
                 border-color: #1D4ED8 !important;
             }
+            div[data-testid="stButton"] > button p,
+            div[data-testid="stDownloadButton"] > button p,
+            div[data-testid="stButton"] > button span,
+            div[data-testid="stForm"] button p,
+            div[data-testid="stForm"] button span,
+            div[data-testid="stDownloadButton"] > button span,
+            button[data-testid="stBaseButton-secondary"] p,
+            button[data-testid="stBaseButton-secondary"] span,
+            button[data-testid="stBaseButton-secondary"] div {
+                color: #FFFFFF !important;
+            }
             div[data-testid="stButton"] > button:hover,
-            div[data-testid="stDownloadButton"] > button:hover {
+            div[data-testid="stDownloadButton"] > button:hover,
+            div[data-testid="stForm"] button:hover,
+            button[data-testid="stBaseButton-secondary"]:hover {
                 background-color: #1D4ED8 !important;
             }
 
@@ -217,24 +243,26 @@ def apply_theme_overrides() -> None:
             div[data-testid="stSegmentedControl"] {
                 background-color: transparent !important;
             }
-            div[data-testid="stBaseButton-segmented_control"],
-            div[data-testid="stBaseButton-pills"] {
+            button[data-testid="stBaseButton-pills"],
+            button[data-testid="stBaseButton-segmented_control"] {
                 background-color: #FFFFFF !important;
                 color: #1A1814 !important;
                 border: 1px solid #D5D0C5 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"] p,
-            div[data-testid="stBaseButton-pills"] p {
+            button[data-testid="stBaseButton-pills"] p,
+            button[data-testid="stBaseButton-segmented_control"] p {
                 color: #1A1814 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"],
-            div[data-testid="stBaseButton-pills"][aria-selected="true"] {
+            button[data-testid="stBaseButton-pillsActive"],
+            button[data-testid="stBaseButton-pills"][aria-selected="true"],
+            button[data-testid="stBaseButton-segmented_control"][aria-selected="true"] {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
                 border-color: #1D4ED8 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"] p,
-            div[data-testid="stBaseButton-pills"][aria-selected="true"] p {
+            button[data-testid="stBaseButton-pillsActive"] p,
+            button[data-testid="stBaseButton-pills"][aria-selected="true"] p,
+            button[data-testid="stBaseButton-segmented_control"][aria-selected="true"] p {
                 color: #FFFFFF !important;
             }
 
@@ -251,6 +279,99 @@ def apply_theme_overrides() -> None:
             /* Dark-to-Light Canvas Transform */
             div[data-testid="stDataFrame"] canvas {
                 filter: invert(1) hue-rotate(180deg) brightness(1.1) !important;
+            }
+            
+            /* Tooltips */
+            div[data-baseweb="tooltip"],
+            div[data-baseweb="tooltip"] > div {
+                background-color: #1A1814 !important;
+                color: #FFFFFF !important;
+                border-radius: 4px !important;
+            }
+            div[data-baseweb="tooltip"] * {
+                color: #FFFFFF !important;
+            }
+
+            /* Contextual Toolbars (Dataframe Hover Menus) */
+            div[data-testid="stElementToolbar"] {
+                background-color: rgba(255, 255, 255, 0.9) !important;
+                border: 1px solid #D5D0C5 !important;
+                border-radius: 4px !important;
+            }
+            div[data-testid="stElementToolbarButtonContainer"],
+            div[data-testid="stElementToolbarButtonContainer"] div,
+            button[kind="elementToolbar"] {
+                background-color: transparent !important;
+            }
+            button[kind="elementToolbar"]:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            button[kind="elementToolbar"] svg,
+            button[kind="elementToolbar"] svg path {
+                fill: rgba(26, 24, 20, 0.5) !important;
+                color: rgba(26, 24, 20, 0.5) !important;
+            }
+            button[kind="elementToolbar"] svg {
+                width: 1.25rem !important;
+                height: 1.25rem !important;
+            }
+            button[kind="elementToolbar"]:hover svg,
+            button[kind="elementToolbar"]:hover svg path {
+                fill: rgba(26, 24, 20, 0.95) !important;
+                color: rgba(26, 24, 20, 0.95) !important;
+            }
+            button[kind="elementToolbar"]:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            /* Plotly Native Modebar */
+            .modebar .modebar-group,
+            div.modebar-group {
+                background-color: rgba(255, 255, 255, 0.75) !important;
+            }
+            .modebar .modebar-btn svg,
+            .modebar .modebar-btn svg path,
+            a.modebar-btn svg,
+            a.modebar-btn svg path {
+                fill: rgba(26, 24, 20, 0.5) !important;
+            }
+            .modebar .modebar-btn.active svg,
+            .modebar .modebar-btn.active svg path,
+            .modebar .modebar-btn:hover svg,
+            .modebar .modebar-btn:hover svg path,
+            a.modebar-btn.active svg,
+            a.modebar-btn.active svg path,
+            a.modebar-btn:hover svg,
+            a.modebar-btn:hover svg path {
+                fill: rgba(26, 24, 20, 0.95) !important;
+            }
+            .modebar .modebar-btn:hover,
+            a.modebar-btn:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            /* Plotly Chart Substrate / iframe Background Fallbacks */
+            .stPlotlyChart iframe,
+            div[data-testid="stPlotlyChart"] iframe {
+                background-color: transparent !important;
+                color-scheme: light !important;
+            }
+            
+            /* Global App Header (Deploy, Settings, Sidebar Toggle Menu) */
+            header[data-testid="stHeader"],
+            div[data-testid="stToolbar"] {
+                background-color: #F4F3EF !important;
+            }
+            div[data-testid="stToolbar"] button,
+            button[data-testid="stExpandSidebarButton"] {
+                color: #1A1814 !important;
+            }
+            div[data-testid="stToolbar"] button span,
+            div[data-testid="stToolbar"] svg,
+            button[data-testid="stExpandSidebarButton"] span,
+            button[data-testid="stExpandSidebarButton"] svg {
+                color: #1A1814 !important;
+                fill: #1A1814 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -396,7 +517,7 @@ def main():
         
         # Helper function for rendering Iconoir labels
         def render_icon_label(icon_class, text):
-            st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; color: inherit; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</div>', unsafe_allow_html=True)
+            st.markdown(f'<p style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; margin: 0; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</p>', unsafe_allow_html=True)
 
         render_icon_label("iconoir-building", "Project")
         selected_project = st.selectbox(
@@ -477,7 +598,7 @@ def main():
         # 4. Visually separate secondary administrative actions
         st.divider()
         
-        st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 600;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
+        st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
         
         # 1. Initialize the concurrency lock in session state
         if "is_syncing" not in st.session_state:
@@ -540,7 +661,7 @@ def main():
         try:
             if storage:
                 stored_projects = storage.get_stored_projects()
-                st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> <strong>{len(stored_projects)}</strong> projects in Azure Storage.</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
