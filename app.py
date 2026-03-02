@@ -310,7 +310,8 @@ def main():
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
-                    st.error(f"Authentication failed: {error_desc}")
+                    logging.error(f"Authentication failed: {error_desc}")
+                    st.error("Authentication failed.")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -530,7 +531,8 @@ def main():
                 st.cache_data.clear()
 
             except Exception as e:
-                st.sidebar.error(f"Sync failed: {str(e)}")
+                logging.error(f"Sync failed: {str(e)}")
+                st.sidebar.error("Sync failed.")
                 
             finally:
                 # The DOM Purge (Architectural Key)
@@ -546,7 +548,8 @@ def main():
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
-            st.caption(f"Storage unavailable: {str(e)}")
+            logging.error(f"Storage unavailable: {str(e)}")
+            st.caption("Storage unavailable.")
             
     # Convert date range to days
     days_map = {
@@ -651,7 +654,8 @@ def fetch_projects(_api, organization):
     try:
         return _api.get_organization_projects(organization)
     except Exception as e:
-        st.error(f"Error fetching projects: {str(e)}")
+        logging.error(f"Error fetching projects: {str(e)}")
+        st.error("Error fetching projects.")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -660,7 +664,8 @@ def fetch_project_branches(_api, project_key):
     try:
         return _api.get_project_branches(project_key)
     except Exception as e:
-        st.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        st.warning(f"Could not fetch branches for {project_key}.")
         return []
 
 def should_retry_api_call(exc: Exception) -> bool:
