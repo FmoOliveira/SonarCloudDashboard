@@ -1,1 +1,0 @@
-C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\extra_streamlit_components\__init__.py

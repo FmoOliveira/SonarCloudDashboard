@@ -13,23 +13,27 @@ An enterprise-ready Streamlit dashboard for monitoring SonarCloud project metric
 
 ## 🧱 Architecture Overview
 ```
-app.py                  # Streamlit UI, orchestration, and session flow
-sonarcloud_api.py        # SonarCloud API client + retry/backoff
-dashboard_components.py  # Plotly charts, cards, layout helpers
-database/                # Storage interfaces + Azure Table Storage backend
-auth.py                  # Entra ID (MSAL) auth + user profile
-styles.css               # UI styling
-.streamlit/config.toml   # Theme configuration
-demo/                    # Synthetic data generator for offline mode
+src/dashboard/
+├── app.py                  # Main entry point: Orchestration and session flow
+├── data_service.py         # Data fetching, async API, and memory-aware caching
+├── dashboard_view.py       # Metrics calculations and UI rendering logic
+├── ui_styles.py            # Unified UI styling and theme management
+├── sonarcloud_api.py       # SonarCloud API client + retry/backoff
+├── dashboard_components.py # Reusable Plotly charts and card helpers
+├── database/               # Storage interfaces + Azure Table Storage backend
+├── demo/                   # Synthetic data generator for offline mode
+└── styles.css              # Custom global CSS
 ```
 
 ### Key Design Choices
-1. **Storage Factory (`database/factory.py`)**  
-   The UI uses `get_storage_client()` to resolve the backend. This keeps `app.py` free of storage-specific concerns.
-2. **Batched writes**  
-   Azure Table Storage writes are batched to reduce network overhead and improve ingestion throughput.
-3. **Memory-aware rendering**  
-   Heavy data is compressed and cached in session state, and Plotly rendering is optimized to avoid unnecessary copies.
+1. **Source Code Separation (`src/` layout)**  
+   The application logic is isolated from deployment and configuration files, following modern Python best practices.
+2. **Modular UI & Data Services**  
+   The entry point (`app.py`) is decoupled from data processing (`data_service.py`) and visualization logic (`dashboard_view.py`), making the codebase easier to maintain and test.
+3. **Storage Factory (`database/factory.py`)**  
+   The UI uses `get_storage_client()` to resolve the backend. This keeps the application free of storage-specific concerns.
+4. **Memory-aware rendering**  
+   Heavy data is compressed and cached in session state using Parquet, and Plotly rendering is optimized to avoid unnecessary copies.
 
 ## ✅ Requirements & Prerequisites
 - **Python 3.10+**
@@ -52,7 +56,6 @@ provider = "azure"
 
 [azure_storage]
 connection_string = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=...;TableEndpoint=http://127.0.0.1:10002/devstoreaccount1;"
-container_name = "sonar-telemetry-cache"
 
 [sonarcloud]
 api_token = "sqp_your_token"
@@ -65,13 +68,13 @@ organization_key = "your-organization-slug"
 
 ### Option A — Standard Local Run
 ```bash
-streamlit run app.py
+streamlit run src/dashboard/app.py
 ```
 
 ### Option B — Offline Demo Mode
 ```bash
-python demo/demo_generator.py
-streamlit run app.py -- --demo-mode
+python src/dashboard/demo/demo_generator.py
+streamlit run src/dashboard/app.py -- --demo-mode
 ```
 
 ### Option C — Docker + Azurite
@@ -82,12 +85,7 @@ Open `http://localhost:8501`.
 
 ## 🧪 Testing
 ```bash
-python -m unittest discover -s tests
-```
-
-Some API tests use pytest:
-```bash
-pytest test_sonar_api.py
+python -m pytest tests
 ```
 
 ## 📦 Requirements (Summary)

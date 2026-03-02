@@ -207,3 +207,43 @@ div[data-testid="stSidebar"] label {
   font-weight: 600;
   color: #888888;
 }
+
+/* Metric Card Elements */
+.neon-icon-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.neon-icon-container i {
+  font-size: 2.2rem;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+
+.neon-title {
+  color: var(--text-dim, #e0e0e0);
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.neon-value {
+  color: var(--text-main, #ffffff);
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.neon-delta {
+  font-size: 0.9rem;
+  margin-top: 0.6rem;
+  font-weight: 500;
+}
+
+.neon-delta-label {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888888);
+  font-weight: 400;
+}
