@@ -7,6 +7,8 @@ Critical UX learnings and observations only.
 
 * Using `st.info` with custom icons rather than plain `st.write` or missing states is important for empty dataframes.
 * Custom dates should be explicit.
+* Date inputs should use explicit `format` strings to guide users and `help` tooltips.
+* Empty search results (like returning no data for a timeframe) shouldn't be treated as critical application errors in `st.status`. Complete the status cleanly and render a helpful `st.info` block guiding the user to adjust filters.
 # Palette's Design Journal 🎨
 
 ## Critical Learnings
