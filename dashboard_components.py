@@ -6,37 +6,50 @@ import numpy as np
 import io
 import html
 
-# Spotify-inspired Color Palette
-CHART_COLORS = ['#1ed760', '#ffc862', '#2d46b9', '#b49bc8', '#1db954']
+# Modern dashboard palette
+CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
 BG_COLOR = 'rgba(0,0,0,0)'  # Transparent
-FONT_COLOR = '#ffffff'
-GRID_COLOR = 'rgba(255,255,255,0.08)'
+FONT_COLOR = '#E5E7EB'
+GRID_COLOR = 'rgba(255,255,255,0.06)'
 
 def apply_modern_layout(fig):
     """Apply modern transparent glassmorphism layout to Plotly figures"""
+    is_light = st.session_state.get("theme_toggle", False)
+    font_color = "#111827" if is_light else FONT_COLOR
+    grid_color = "rgba(17,24,39,0.12)" if is_light else GRID_COLOR
+    legend_bg = "rgba(255, 255, 255, 0.9)" if is_light else "rgba(24, 27, 34, 0.85)"
+    legend_border = "rgba(15, 23, 42, 0.08)" if is_light else "rgba(255, 255, 255, 0.08)"
+    hover_bg = "rgba(255, 255, 255, 0.95)" if is_light else "rgba(17, 19, 24, 0.95)"
+    hover_border = "rgba(59, 130, 246, 0.3)" if is_light else "rgba(59, 130, 246, 0.4)"
+    
     fig.update_layout(
+        template="plotly_white" if is_light else "plotly_dark",
         autosize=True,
         plot_bgcolor=BG_COLOR,
         paper_bgcolor=BG_COLOR,
-        font=dict(color=FONT_COLOR, family="Inter, sans-serif"),
+        font=dict(color=font_color, family="Inter, sans-serif"),
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(
-            bgcolor='rgba(20, 30, 52, 0.5)',
-            bordercolor='rgba(255, 255, 255, 0.1)',
-            borderwidth=1
+            bgcolor=legend_bg,
+            bordercolor=legend_border,
+            borderwidth=1,
+            font=dict(color=font_color)
         ),
         hoverlabel=dict(
-            bgcolor="rgba(10, 15, 28, 0.9)",
+            bgcolor=hover_bg,
             font_size=13,
             font_family="Inter, sans-serif",
-            bordercolor="rgba(0, 210, 255, 0.3)"
+            bordercolor=hover_border,
+            font=dict(color=font_color)
         )
     )
     
     fig.update_xaxes(
         showgrid=True,
         gridwidth=1,
-        gridcolor=GRID_COLOR,
+        gridcolor=grid_color,
+        tickfont=dict(color=font_color),
+        titlefont=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -44,7 +57,9 @@ def apply_modern_layout(fig):
     fig.update_yaxes(
         showgrid=True,
         gridwidth=1,
-        gridcolor=GRID_COLOR,
+        gridcolor=grid_color,
+        tickfont=dict(color=font_color),
+        titlefont=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -65,7 +80,7 @@ def create_metric_card(title: str, value: str, icon_class: str, delta: str = Non
         safe_color = html.escape(delta_color)
         delta_html = f"""
 <div style="font-size: 0.9rem; color: {safe_color}; margin-top: 0.6rem; font-weight: 500;">
-    {safe_delta} <span style="font-size: 0.8rem; color: #888888; font-weight: 400;">vs start</span>
+    {safe_delta} <span style="font-size: 0.8rem; color: var(--text-muted, #888888); font-weight: 400;">vs start</span>
 </div>"""
 
     card_html = f"""
@@ -73,10 +88,10 @@ def create_metric_card(title: str, value: str, icon_class: str, delta: str = Non
     <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.8rem;">
         <i class="{safe_icon}" style="font-size: 2.2rem; filter: drop-shadow(0 0 8px currentColor);"></i>
     </div>
-    <div style="color: #e0e0e0; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; letter-spacing: 0.05em;">
+    <div style="color: var(--text-dim, #e0e0e0); font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; letter-spacing: 0.05em;">
         {safe_title}
     </div>
-    <div style="color: #ffffff; font-size: 2.5rem; font-weight: 700; line-height: 1;">
+    <div style="color: var(--text-main, #ffffff); font-size: 2.5rem; font-weight: 700; line-height: 1;">
         {safe_value}
     </div>
     {delta_html}
@@ -258,7 +273,7 @@ def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     fig.update_traces(marker_line_width=0, opacity=0.9)
     fig = apply_modern_layout(fig)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figure:
     """
@@ -439,7 +454,7 @@ def create_quality_gate_status(projects_data: pd.DataFrame):
     fig = apply_modern_layout(fig)
     fig.update_traces(hole=.4, hoverinfo="label+percent+name")
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 def format_metric_value(metric: str, value):
     """Format metric values for display"""
@@ -501,7 +516,7 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     
     fig = apply_modern_layout(fig)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 def inject_statistical_anomalies(
     fig: go.Figure, 

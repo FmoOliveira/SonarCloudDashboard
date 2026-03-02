@@ -3,20 +3,20 @@ enableStaticServing = true
 
 [theme]
 base = "dark"
-primaryColor = "#3182CE"
-backgroundColor = "#1A202C"
-secondaryBackgroundColor = "#2D3748"
-codeBackgroundColor = "#1A202C"
-textColor = "#E2E8F0"
-linkColor = "#3182CE"
-borderColor = "#7c7c7c"
+primaryColor = "#3B82F6"
+backgroundColor = "#0B0C10"
+secondaryBackgroundColor = "#181B22"
+codeBackgroundColor = "#111318"
+textColor = "#E5E7EB"
+linkColor = "#60A5FA"
+borderColor = "#2A2F3A"
 showWidgetBorder = true
-baseRadius = "0.3rem"
-buttonRadius = "full"
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
 font = "Inter"
 
 [theme.sidebar]
-backgroundColor = "#121212"
-secondaryBackgroundColor = "#000000"
-codeBackgroundColor = "#2a2a2a"
-borderColor = "#696969"
+backgroundColor = "#111318"
+secondaryBackgroundColor = "#151924"
+codeBackgroundColor = "#0F1117"
+borderColor = "#2A2F3A"

@@ -93,10 +93,178 @@ def init_storage_client():
     """Dynamically initialize the configured database client via Factory"""
     return get_storage_client()
 
+def apply_theme_overrides() -> None:
+    if not st.session_state.get("theme_toggle", False):
+        return
+    
+    st.markdown("""
+        <style>
+            :root {
+                /* Inverted from Dark Mode Palette #181B22 -> #E7E4DD, etc. */
+                --card-bg: #E7E4DD;
+                --card-border: #D5D0C5;
+                --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+                --text-main: #1A1814;
+                --text-dim: #3A3834;
+                --text-muted: #5A5854;
+            }
+            html,
+            body,
+            div[data-testid="stApp"] {
+                background-color: #F4F3EF !important;
+                color: #1A1814 !important;
+            }
+            div[data-testid="stAppViewContainer"] {
+                background-color: #F4F3EF !important;
+            }
+            section.main {
+                background-color: transparent !important;
+            }
+            section[data-testid="stSidebar"],
+            div[data-testid="stSidebar"] {
+                background-color: #E7E4DD !important;
+            }
+            [data-testid="stSidebarNav"] span,
+            div[data-testid="stSidebar"] label {
+                color: #5A5854 !important;
+            }
+            div.block-container {
+                color: #1A1814 !important;
+            }
+            h1, h2, h3, h4, h5, h6,
+            p, span, label, li, a {
+                color: #1A1814 !important;
+            }
+            a {
+                color: #2563EB !important;
+            }
+            
+            /* Input Fields */
+            div[data-testid="stTextInput"] input,
+            div[data-testid="stNumberInput"] input,
+            div[data-testid="stDateInput"] input,
+            div[data-testid="stTextArea"] textarea {
+                color: #1A1814 !important;
+                background-color: #FFFFFF !important;
+                border-color: #D5D0C5 !important;
+            }
+            div[data-testid="stTextInput"] input::placeholder,
+            div[data-testid="stTextArea"] textarea::placeholder {
+                color: #8C8A86 !important;
+            }
+
+            /* Override styles.css Base Web Selectors for MultiSelect components */
+            div[data-baseweb="select"],
+            div[data-baseweb="select"] > div {
+                background-color: #FFFFFF !important;
+                color: #1A1814 !important;
+            }
+            span[data-baseweb="tag"] {
+                background-color: #E7E4DD !important;
+                border: 1px solid #D5D0C5 !important;
+            }
+            span[data-baseweb="tag"] span {
+                color: #1A1814 !important;
+            }
+            
+            /* BaseWeb Dropdown Menus (Rendered outside main DOM context) */
+            div[data-baseweb="popover"] ul[role="listbox"],
+            div[data-baseweb="popover"] div[role="listbox"] {
+                background-color: #FFFFFF !important;
+                color: #1A1814 !important;
+            }
+            div[data-baseweb="popover"] li[role="option"] {
+                background-color: #FFFFFF !important;
+                color: #1A1814 !important;
+            }
+            div[data-baseweb="popover"] li[role="option"]:hover,
+            div[data-baseweb="popover"] li[aria-selected="true"] {
+                background-color: #F4F3EF !important;
+                color: #2563EB !important;
+            }
+
+            /* Buttons & Download CSV */
+            div[data-testid="stButton"] > button,
+            div[data-testid="stDownloadButton"] > button {
+                background-color: #2563EB !important;
+                color: #FFFFFF !important;
+                border-color: #1D4ED8 !important;
+            }
+            div[data-testid="stButton"] > button:hover,
+            div[data-testid="stDownloadButton"] > button:hover {
+                background-color: #1D4ED8 !important;
+            }
+
+            /* Popover Login & Profile Button */
+            div[data-testid="stPopover"] button {
+                background-color: #FFFFFF !important;
+                color: #1A1814 !important;
+                border-color: #D5D0C5 !important;
+            }
+            div[data-testid="stPopoverBody"],
+            .stPopoverBody {
+                background-color: #F4F3EF !important;
+                border-color: #D5D0C5 !important;
+            }
+            div[data-testid="stPopoverBody"] p,
+            div[data-testid="stPopoverBody"] span,
+            .stPopoverBody p,
+            .stPopoverBody span {
+                color: #1A1814 !important;
+            }
+
+            /* st.pills & Segmented Controls (Deep Base DOM Targeting) */
+            div[data-testid="stSegmentedControl"] {
+                background-color: transparent !important;
+            }
+            div[data-testid="stBaseButton-segmented_control"],
+            div[data-testid="stBaseButton-pills"] {
+                background-color: #FFFFFF !important;
+                color: #1A1814 !important;
+                border: 1px solid #D5D0C5 !important;
+            }
+            div[data-testid="stBaseButton-segmented_control"] p,
+            div[data-testid="stBaseButton-pills"] p {
+                color: #1A1814 !important;
+            }
+            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"],
+            div[data-testid="stBaseButton-pills"][aria-selected="true"] {
+                background-color: #2563EB !important;
+                color: #FFFFFF !important;
+                border-color: #1D4ED8 !important;
+            }
+            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"] p,
+            div[data-testid="stBaseButton-pills"][aria-selected="true"] p {
+                color: #FFFFFF !important;
+            }
+
+            /* Forcible Canvas Dataframe Element Inversion Tooling */
+            div[data-testid="stDataFrame"] {
+                --background-color: #FFFFFF !important;
+                --text-color: #1A1814 !important;
+                --secondary-background-color: #F4F3EF !important;
+                background-color: #FFFFFF !important;
+            }
+            div[data-testid="stDataFrame"] * {
+                color: #1A1814 !important;
+            }
+            /* Dark-to-Light Canvas Transform */
+            div[data-testid="stDataFrame"] canvas {
+                filter: invert(1) hue-rotate(180deg) brightness(1.1) !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+def render_theme_toggle() -> None:
+    st.toggle("Light mode", key="theme_toggle")
+
 # Main app
 def main():
     inject_custom_css()
     load_css("styles.css")
+    if "theme_toggle" not in st.session_state:
+        st.session_state.theme_toggle = False
+    apply_theme_overrides()
     st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
     
     # Initialize Cookie Manager directly (it handles duplicates internally)
@@ -170,6 +338,8 @@ def main():
         
         auth_url = get_auth_url()
         with st.sidebar:
+            render_theme_toggle()
+            st.markdown("<br>", unsafe_allow_html=True)
             st.link_button(
                 "Login with Corporate AD", 
                 url=auth_url, 
@@ -217,6 +387,9 @@ def main():
             st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
             if st.button("Logout", use_container_width=True, type="primary"):
                 logout(cookies)
+        
+        render_theme_toggle()
+        st.markdown("<br>", unsafe_allow_html=True)
         
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -750,7 +923,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
-    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-bar-chart"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
     
     # --- 1. Define the Data Dictionary ---
     ALL_METRICS = [
@@ -890,7 +1063,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             if st.session_state.get('show_anomalies', False):
                 fig = inject_statistical_anomalies(fig, df, 'date', confirmed_metrics)
                 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, theme=None)
             
         st.markdown("<br>", unsafe_allow_html=True)
         st.toggle(
@@ -1052,10 +1225,10 @@ def create_box_plot(df, metric, project_names):
         xaxis_tickangle=-45
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 if __name__ == "__main__":
     main()

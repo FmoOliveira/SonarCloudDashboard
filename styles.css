@@ -21,6 +21,20 @@ body,
 div[data-testid="stApp"] {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+h1 {
+  font-size: 1.6rem !important;
+}
+
+h2 {
+  font-size: 1.25rem !important;
+}
+
+h3 {
+  font-size: 1.1rem !important;
 }
 
 /* Targeting specific button behaviors (Optional Polish)
@@ -111,27 +125,29 @@ div[data-testid="stDataFrame"] {
   width: 100% !important;
 }
 
-/* --- NEON DARK THEME --- */
+/* --- MODERN DARK THEME --- */
 :root {
-  --neon-green: #00ff00;
-  --neon-orange: #ff8c00;
-  --neon-teal: #00ced1;
-  --neon-blue: #1e90ff;
-  --card-bg: #1e1e1e;
+  --card-bg: #181B22;
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --accent-blue: #3B82F6;
+  --accent-amber: #F59E0B;
+  --accent-teal: #22C55E;
+  --accent-violet: #8B5CF6;
 }
 
 .neon-card {
   background-color: var(--card-bg);
-  border-radius: 8px;
-  padding: 1.5rem 1rem;
+  border-radius: 12px;
+  padding: 1.25rem 1.25rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  text-align: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease-in-out;
+  text-align: left;
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--card-border);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   height: 220px;
   /* Fixed height strictly forces uniformity across all columns */
   min-width: 0;
@@ -140,46 +156,46 @@ div[data-testid="stDataFrame"] {
   /* Force long titles to wrap instead of expanding container */
 }
 
-/* Base Neon Borders */
+/* Subtle Accent Borders */
 .neon-card.neon-green {
-  border-color: rgba(0, 255, 0, 0.3);
+  border-color: rgba(34, 197, 94, 0.35);
 }
 
 .neon-card.neon-orange {
-  border-color: rgba(255, 140, 0, 0.3);
+  border-color: rgba(245, 158, 11, 0.35);
 }
 
 .neon-card.neon-teal {
-  border-color: rgba(0, 206, 209, 0.3);
+  border-color: rgba(59, 130, 246, 0.35);
 }
 
 .neon-card.neon-blue {
-  border-color: rgba(30, 144, 255, 0.3);
+  border-color: rgba(139, 92, 246, 0.35);
 }
 
-/* Hover Glow Effects */
+/* Hover Effects */
 .neon-card.neon-green:hover {
-  box-shadow: 0 0 15px rgba(0, 255, 0, 0.4), inset 0 0 10px rgba(0, 255, 0, 0.1);
-  border-color: var(--neon-green);
-  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  border-color: rgba(34, 197, 94, 0.6);
+  transform: translateY(-3px);
 }
 
 .neon-card.neon-orange:hover {
-  box-shadow: 0 0 15px rgba(255, 140, 0, 0.4), inset 0 0 10px rgba(255, 140, 0, 0.1);
-  border-color: var(--neon-orange);
-  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-3px);
 }
 
 .neon-card.neon-teal:hover {
-  box-shadow: 0 0 15px rgba(0, 206, 209, 0.4), inset 0 0 10px rgba(0, 206, 209, 0.1);
-  border-color: var(--neon-teal);
-  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  border-color: rgba(59, 130, 246, 0.6);
+  transform: translateY(-3px);
 }
 
 .neon-card.neon-blue:hover {
-  box-shadow: 0 0 15px rgba(30, 144, 255, 0.4), inset 0 0 10px rgba(30, 144, 255, 0.1);
-  border-color: var(--neon-blue);
-  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  border-color: rgba(139, 92, 246, 0.6);
+  transform: translateY(-3px);
 }
 
 /* Sidebar Typography Overrides */
