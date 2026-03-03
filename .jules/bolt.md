@@ -9,3 +9,7 @@
 - **Performance Opportunity Found:** In-memory Pandas DataFrames containing large time-series telemetry consume excessive RAM within Streamlit's `st.session_state`, increasing overhead during Parquet serialization/deserialization.
 - **The Fix:** Implemented downcasting in `app.py`'s `fetch_metrics_data` before caching. Categorical strings (`project_key`, `branch`) were converted to the `category` dtype, and numerical metrics were downcast from `float64` to `float32`.
 - **Why it Matters:** This reduces the dataframe's memory footprint by up to ~80%. Smaller objects in `st.session_state` prevent memory leaks, reduce OS-level garbage collection stalls, and significantly speed up the PyArrow Parquet compression cycle before rendering Plotly components.
+
+- **Anti-Pattern Found:** Redundant `O(N log N)` sorting within loops. In `dashboard_view.py`, `compute_metric_stats` was sorting the entire dataframe by date for *every single metric* calculated inside a loop, resulting in a time complexity of `O(M * N log N)`.
+- **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
+- **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
