@@ -32,7 +32,8 @@ def fetch_projects(_api, organization):
     try:
         return _api.get_organization_projects(organization)
     except Exception as e:
-        st.error(f"Error fetching projects: {str(e)}")
+        logging.error(f"Error fetching projects: {str(e)}")
+        st.error("Error fetching projects. An internal error occurred.")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -41,7 +42,8 @@ def fetch_project_branches(_api, project_key):
     try:
         return _api.get_project_branches(project_key)
     except Exception as e:
-        st.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: Exception) -> bool:
