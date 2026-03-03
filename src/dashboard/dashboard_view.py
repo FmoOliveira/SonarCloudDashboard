@@ -13,9 +13,8 @@ def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True
     if df.empty or metric_col not in df.columns or 'date' not in df.columns:
         return ("0.0%" if is_percent else "0", None, "#888888")
     
-    df_sorted = df.sort_values('date')
-    
-    grouped = df_sorted.groupby('project_key', sort=False, observed=True)[metric_col]
+    # Assuming df is already sorted by date to save O(N log N) sorting per metric
+    grouped = df.groupby('project_key', sort=False, observed=True)[metric_col]
     earliest_total = float(grouped.first().sum())
     latest_total = float(grouped.last().sum())
     project_count = grouped.ngroups
@@ -99,28 +98,35 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     project_names = {p['key']: p['name'] for p in all_projects}
     df['project_name'] = df['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Sort dataframe by date once globally instead of multiple times
+    # sorting in compute_metric_stats to prevent O(M*N log N) sorting bottleneck.
+    if not df.empty and 'date' in df.columns:
+        df_sorted = df.sort_values('date')
+    else:
+        df_sorted = df
+
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        val, delta, color = compute_metric_stats(df, 'vulnerabilities')
+        val, delta, color = compute_metric_stats(df_sorted, 'vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = compute_metric_stats(df, 'security_hotspots')
+        val, delta, color = compute_metric_stats(df_sorted, 'security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = compute_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = compute_metric_stats(df_sorted, 'duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = compute_metric_stats(df, 'security_rating')
+        val, delta, color = compute_metric_stats(df_sorted, 'security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = compute_metric_stats(df, 'reliability_rating')
+        val, delta, color = compute_metric_stats(df_sorted, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Detailed Metrics</h2>', unsafe_allow_html=True)

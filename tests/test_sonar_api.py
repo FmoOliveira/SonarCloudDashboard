@@ -6,7 +6,7 @@ from aiohttp import ClientResponseError
 from tenacity import wait_none
 
 # Import the retry object from our module
-from app import fetch_sonar_history_async
+from data_service import fetch_sonar_history_async
 
 # Strip all artificial latency from the test suite
 fetch_sonar_history_async.retry.wait = wait_none()
