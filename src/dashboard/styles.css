@@ -125,77 +125,38 @@ div[data-testid="stDataFrame"] {
   width: 100% !important;
 }
 
-/* --- MODERN DARK THEME --- */
+/* --- MODERN FLAT ENTERPRISE THEME --- */
 :root {
   --card-bg: #181B22;
-  --card-border: rgba(255, 255, 255, 0.06);
-  --card-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  --accent-blue: #3B82F6;
-  --accent-amber: #F59E0B;
-  --accent-teal: #22C55E;
-  --accent-violet: #8B5CF6;
+  --card-border: rgba(255, 255, 255, 0.1);
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --text-main: #f8fafc;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
 }
 
+/* Metric Card Base */
 .neon-card {
-  background-color: var(--card-bg);
+  background-color: var(--card-bg, #181B22);
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
   border-radius: 12px;
-  padding: 1.25rem 1.25rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  text-align: left;
-  box-shadow: var(--card-shadow);
-  border: 1px solid var(--card-border);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  height: 220px;
-  /* Fixed height strictly forces uniformity across all columns */
-  min-width: 0;
-  /* Allow the flexbox to shrink past its content width */
-  word-wrap: break-word;
-  /* Force long titles to wrap instead of expanding container */
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+  height: 200px;
 }
 
-/* Subtle Accent Borders */
-.neon-card.neon-green {
-  border-color: rgba(34, 197, 94, 0.35);
-}
-
-.neon-card.neon-orange {
-  border-color: rgba(245, 158, 11, 0.35);
-}
-
-.neon-card.neon-teal {
-  border-color: rgba(59, 130, 246, 0.35);
-}
-
-.neon-card.neon-blue {
-  border-color: rgba(139, 92, 246, 0.35);
-}
-
-/* Hover Effects */
-.neon-card.neon-green:hover {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  border-color: rgba(34, 197, 94, 0.6);
-  transform: translateY(-3px);
-}
-
-.neon-card.neon-orange:hover {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  border-color: rgba(245, 158, 11, 0.6);
-  transform: translateY(-3px);
-}
-
-.neon-card.neon-teal:hover {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  border-color: rgba(59, 130, 246, 0.6);
-  transform: translateY(-3px);
-}
-
-.neon-card.neon-blue:hover {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  border-color: rgba(139, 92, 246, 0.6);
-  transform: translateY(-3px);
+/* Hover state: elevation instead of glow */
+.neon-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  border-color: var(--card-border);
 }
 
 /* Sidebar Typography Overrides */
@@ -217,33 +178,49 @@ div[data-testid="stSidebar"] label {
 }
 
 .neon-icon-container i {
-  font-size: 2.2rem;
-  filter: drop-shadow(0 0 8px currentColor);
+  font-size: 2rem;
 }
 
 .neon-title {
-  color: var(--text-dim, #e0e0e0);
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: var(--text-dim, #94a3b8);
+  font-size: 0.8rem;
+  font-weight: 600;
   margin-bottom: 0.5rem;
+  text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .neon-value {
-  color: var(--text-main, #ffffff);
-  font-size: 2.5rem;
+  color: var(--text-main, #f8fafc);
+  font-size: 2.2rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .neon-delta {
-  font-size: 0.9rem;
-  margin-top: 0.6rem;
-  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.8rem;
+  font-weight: 600;
 }
 
 .neon-delta-label {
-  font-size: 0.8rem;
-  color: var(--text-muted, #888888);
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
   font-weight: 400;
 }
+
+/* Clean, Solid Status Colors (Top Accent Borders) */
+.neon-green i { color: #10b981; }
+.neon-green { border-top: 4px solid #10b981 !important; }
+
+.neon-orange i { color: #f59e0b; }
+.neon-orange { border-top: 4px solid #f59e0b !important; }
+
+.neon-blue i { color: #3b82f6; }
+.neon-blue { border-top: 4px solid #3b82f6 !important; }
+
+.neon-teal i { color: #06b6d4; }
+.neon-teal { border-top: 4px solid #06b6d4 !important; }
+
+.neon-purple i { color: #8b5cf6; }
+.neon-purple { border-top: 4px solid #8b5cf6 !important; }

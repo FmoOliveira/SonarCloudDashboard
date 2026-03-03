@@ -146,11 +146,18 @@ def main():
                 st.markdown(f'<div style="text-align: center;"><img src="{safe_photo_b64}" style="width: 64px; height: 64px; border-radius: 50%;"></div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: #1db954; color: white; display: flex; justify-content: center; align-items: center; font-weight: 700;">{safe_initials}</div></div>', unsafe_allow_html=True)
-            if st.button("Logout", use_container_width=True, type="primary"):
+            
+            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
+            
+            # Theme toggle moved inside the Profile menu
+            render_theme_toggle()
+            
+            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+            
+            if st.button("Logout", use_container_width=True, type="primary", icon=":material/logout:"):
                 logout(cookies)
         
-        render_theme_toggle()
-        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         
         selected_project = st.selectbox(
             "Project",
@@ -169,9 +176,9 @@ def main():
             date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
             days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
             branch_filter = st.selectbox("Branch", options=branch_options) if branch_options else "master"
-            execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True)
+            execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 
-        if st.button("Refresh Azure Data", use_container_width=True):
+        if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
             st.cache_data.clear()
             st.rerun()
 

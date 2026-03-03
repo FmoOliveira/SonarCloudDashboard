@@ -5,11 +5,12 @@
 An enterprise-ready Streamlit dashboard for monitoring SonarCloud project metrics over time. It provides a fast, responsive UI with metric cards, interactive charts, and a storage abstraction that supports Azure Table Storage today and can be extended to PostgreSQL.
 
 ## ✨ Features
-- **Multi-project insights** with cached historical metrics and trend charts.
-- **Storage abstraction** via a factory/strategy pattern (`database/`) to keep the UI decoupled from the backend.
-- **Async SonarCloud ingestion** with retry logic and batching.
-- **Light/Dark mode toggle** with a modern UI theme.
-- **Offline demo mode** using synthetic data (`demo/`).
+- **Enterprise Authentication**: Integrated with **Microsoft Entra ID (Azure AD)** via MSAL for secure, single sign-on access.
+- **Multi-project insights**: Cached historical metrics and trend charts for a comprehensive view of your SonarCloud organization.
+- **Professional UI Design**: Modern "Flat Enterprise" aesthetic with status-coded metric cards, optimized for both **Light and Dark modes**.
+- **Storage abstraction**: Factory/strategy pattern (`database/`) decouples UI from the backend (Azure Table Storage supported).
+- **High-Performance Ingestion**: Async SonarCloud API fetching with exponential backoff and memory-efficient Parquet compression.
+- **Offline demo mode**: View the dashboard instantly using synthetic data (`demo/`).
 
 ## 🧱 Architecture Overview
 ```
@@ -34,6 +35,14 @@ src/dashboard/
    The UI uses `get_storage_client()` to resolve the backend. This keeps the application free of storage-specific concerns.
 4. **Memory-aware rendering**  
    Heavy data is compressed and cached in session state using Parquet, and Plotly rendering is optimized to avoid unnecessary copies.
+5. **Unified Theme Management**  
+   A centralized styling system ensures visual consistency for buttons, inputs, and custom components across theme transitions.
+
+## 🎨 UI Themes
+The dashboard features a professional, high-contrast theme system:
+- **Dark Mode**: Deep navy backgrounds with subtle borders and vibrant status accents.
+- **Light Mode**: Clean, minimal "borderless" aesthetic with soft off-white backgrounds and professional corporate blue controls.
+- **Switching**: Accessible via the User Profile popover in the sidebar.
 
 ## ✅ Requirements & Prerequisites
 - **Python 3.10+**
