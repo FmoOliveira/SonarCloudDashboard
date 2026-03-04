@@ -909,7 +909,9 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history = []
+        # ⚡ Bolt Optimization: Replace O(N) list lookup with O(1) dictionary hashing.
+        # This reduces time complexity from O(M*N^2) to O(M*N) when iterating over measures and dates.
+        history_dict: dict[str, dict] = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -918,19 +920,19 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = next((r for r in history if r['date'] == date_val), None)
+                        record = history_dict.get(date_val)
                         if not record:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
-                            history.append(record)
+                            history_dict[date_val] = record
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
                         else:
                             record[metric_name] = int(float(value)) if '.' in value else int(value)
                             
-        return history
+        return list(history_dict.values())
 
 async def _fetch_all_projects_history(project_keys: list, token: str, days: int, branch: str) -> dict:
     connector = aiohttp.TCPConnector(limit_per_host=5)
