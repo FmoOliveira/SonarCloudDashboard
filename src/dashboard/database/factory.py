@@ -11,19 +11,20 @@ def get_storage_client() -> StorageInterface | None:
     from explicit implementations like Azure or PostgreSQL.
     """
     try:
-        # Default to azure if no explicit provider is set but database section exists
-        database_config = st.secrets.get("database", {})
-        provider = database_config.get("provider", "azure")
+        import os
+        # Default to azure if no explicit provider is set
+        database_config = st.secrets.get("database", {}) if "DATABASE_PROVIDER" not in os.environ else {}
+        provider = os.environ.get("DATABASE_PROVIDER") or database_config.get("provider", "azure")
         
         if provider == "azure":
             from database.azure_storage import AzureTableStorage
             
             # Fail-fast extraction for provider-specific secrets
             try:
-                conn_string = st.secrets["azure_storage"]["connection_string"]
+                conn_string = os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or st.secrets["azure_storage"]["connection_string"]
                 return AzureTableStorage(conn_string)
             except KeyError:
-                st.error("Security Configuration Error: Missing 'connection_string' in [azure_storage].", icon="🚨")
+                st.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.", icon="🚨")
                 st.stop()
                 
         elif provider == "postgres":

@@ -78,9 +78,15 @@ def handle_project_change():
 
 def get_secret(domain: str, key: str) -> str:
     """
-    Safely extracts secrets with O(1) dictionary lookup, 
+    Safely extracts secrets checking OS environment variables first, 
     enforcing strict validation before downstream API calls occur.
     """
+    # Azure Application Settings flatten environment variables, 
+    # so we intercept them directly from the OS first!
+    env_name = f"{domain.upper()}_{key.upper()}"
+    if env_name in os.environ:
+        return os.environ[env_name]
+        
     try:
         return st.secrets[domain][key]
     except FileNotFoundError:
