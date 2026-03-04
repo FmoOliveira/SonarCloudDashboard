@@ -11,10 +11,8 @@ if hasattr(st, 'cache'):
 
 import pandas as pd
 import html
-from datetime import datetime
 import os
 import gc
-import logging
 import sys
 from streamlit_cookies_manager import CookieManager
 
@@ -183,15 +181,16 @@ def main():
             st.rerun()
 
     if execute_analysis:
-        with st.spinner("Loading telemetry..."):
+        with st.status("Loading telemetry...", expanded=True) as status:
             if is_demo_mode:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
-                df = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
+                _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
                 st.session_state['metrics_data_parquet'] = b"" # simplified for demo
             else:
                 st.session_state['metrics_data_parquet'] = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
+            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
 
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
