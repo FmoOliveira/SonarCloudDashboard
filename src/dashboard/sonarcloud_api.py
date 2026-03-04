@@ -3,6 +3,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import List, Dict, Optional
 import streamlit as st
+import logging
 
 class SonarCloudAPI:
     """SonarCloud API client for fetching organization and project metrics"""
@@ -69,7 +70,8 @@ class SonarCloudAPI:
             return projects
             
         except Exception as e:
-            st.error(f"Failed to fetch projects: {str(e)}")
+            logging.error(f"Failed to fetch projects: {str(e)}")
+            st.error("Failed to fetch projects. An internal error occurred.")
             return []
     
     def get_project_measures(self, project_key: str, branch: str = None) -> Optional[Dict]:
@@ -128,7 +130,8 @@ class SonarCloudAPI:
             return measures if measures else None
             
         except Exception as e:
-            st.warning(f"Failed to fetch measures for {project_key}: {str(e)}")
+            logging.warning(f"Failed to fetch measures for {project_key}: {str(e)}")
+            st.warning("Failed to fetch measures. An internal error occurred.")
             return None
     
     def get_project_history(self, project_key: str, days: int, branch: str = None) -> List[Dict]:
@@ -215,7 +218,8 @@ class SonarCloudAPI:
             return list(history_data.values())
             
         except Exception as e:
-            st.warning(f"Failed to fetch history for {project_key}: {str(e)}")
+            logging.warning(f"Failed to fetch history for {project_key}: {str(e)}")
+            st.warning("Failed to fetch history. An internal error occurred.")
             return []
     
     def get_organization_metrics(self, organization: str) -> Dict:
@@ -253,7 +257,8 @@ class SonarCloudAPI:
             return total_metrics
             
         except Exception as e:
-            st.error(f"Failed to fetch organization metrics: {str(e)}")
+            logging.error(f"Failed to fetch organization metrics: {str(e)}")
+            st.error("Failed to fetch organization metrics. An internal error occurred.")
             return {}
     
     def get_project_branches(self, project_key: str) -> List[Dict]:
@@ -265,5 +270,6 @@ class SonarCloudAPI:
             )
             return response.get('branches', [])
         except Exception as e:
-            st.warning(f"Failed to fetch branches for {project_key}: {str(e)}")
+            logging.warning(f"Failed to fetch branches for {project_key}: {str(e)}")
+            st.warning("Failed to fetch branches. An internal error occurred.")
             return []
