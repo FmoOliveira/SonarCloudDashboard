@@ -13,3 +13,7 @@
 - **Anti-Pattern Found:** Redundant `O(N log N)` sorting within loops. In `dashboard_view.py`, `compute_metric_stats` was sorting the entire dataframe by date for *every single metric* calculated inside a loop, resulting in a time complexity of `O(M * N log N)`.
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
+
+- **Anti-Pattern Found:** Utilizing $O(N)$ list lookups (`next((r for r in history if r['date'] == date_val), None)`) inside nested loops when parsing large JSON payloads blocks the main execution thread.
+- **The Fix:** Refactored the data parsing logic in `fetch_sonar_history_async` to use an $O(1)$ dictionary lookup keyed by the `date` attribute.
+- **Why it Matters:** This optimization reduces the time complexity of the JSON parsing step from $O(N^2)$ to $O(N)$. Because `asyncio` runs in a single thread, any heavy, blocking CPU-bound code like a slow $O(N^2)$ nested loop will freeze the entire event loop and delay rendering.
