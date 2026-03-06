@@ -11,10 +11,8 @@ if hasattr(st, 'cache'):
 
 import pandas as pd
 import html
-from datetime import datetime
 import os
 import gc
-import logging
 import sys
 from streamlit_cookies_manager import CookieManager
 
@@ -159,10 +157,14 @@ def main():
         
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         
+        # ⚡ Bolt Optimization: Map projects list to a dictionary for O(1) format_func
+        # lookup in the Streamlit render loop. The old `next(generator)` was O(M*N).
+        project_names = {p['key']: p['name'] for p in projects}
+
         selected_project = st.selectbox(
             "Project",
             options=[p['key'] for p in projects],
-            format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
+            format_func=lambda x: project_names.get(x, x),
             on_change=handle_project_change
         )
         
@@ -186,7 +188,7 @@ def main():
         with st.spinner("Loading telemetry..."):
             if is_demo_mode:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
-                df = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
+                _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
                 st.session_state['metrics_data_parquet'] = b"" # simplified for demo
             else:
                 st.session_state['metrics_data_parquet'] = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
