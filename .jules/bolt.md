@@ -13,3 +13,7 @@
 - **Anti-Pattern Found:** Redundant `O(N log N)` sorting within loops. In `dashboard_view.py`, `compute_metric_stats` was sorting the entire dataframe by date for *every single metric* calculated inside a loop, resulting in a time complexity of `O(M * N log N)`.
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
+
+- **Anti-Pattern Found:** Using `df.iterrows()` to loop through dataframes when processing visual dashboard components. In `dashboard_components.py`, `create_quality_gate_status` used `iterrows()` to manually calculate status conditions for each project individually.
+- **The Fix:** Replaced `.iterrows()` in `create_quality_gate_status` with vectorized operations using `np.select` and boolean masks to calculate the statuses across all projects simultaneously.
+- **Why it Matters:** Iterating over a Pandas dataframe row by row using `.iterrows()` is significantly slower than using vectorized operations (O(N) vs O(1) conceptually for dataframe manipulation). This replacement speeds up data processing before generating charts and dashboard metrics, preventing long main thread stalls on the UI rendering cycle.
