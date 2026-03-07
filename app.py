@@ -92,11 +92,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 # Initialize SonarCloud API
 @st.cache_resource
@@ -669,6 +671,7 @@ def main():
                     "Branch Filter",
                     value="master",
                     help="No branches found. Enter branch name manually.",
+                    placeholder="e.g., main, master, feature/xyz",
                     label_visibility="collapsed"
                 )
             
@@ -796,7 +799,6 @@ def main():
                 compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
                 
             if not compressed_bytes:
-                st.error("No metrics data available.")
                 st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.stop()
                 
@@ -881,7 +883,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -909,7 +911,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history = []
+        history: list[dict] = []
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -1215,6 +1217,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             default=st.session_state.active_metrics,
             format_func=lambda m: m.replace('_', ' ').title(),
             on_change=sync_multiselect_to_preset,
+            placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
