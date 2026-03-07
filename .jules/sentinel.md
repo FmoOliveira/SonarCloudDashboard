@@ -82,3 +82,8 @@
 **Vulnerability:** Internal system errors, such as database connection string errors and underlying Azure Table Storage SDK exceptions `str(e)`, were being directly rendered to the frontend via Streamlit's `st.error` UI elements.
 **Learning:** Exposing raw backend exception messages provides potential attackers with deep insight into the internal infrastructure, database schema, and potential entry points.
 **Prevention:** Use generic, safe error messages for user-facing UI elements (e.g., "An internal error occurred"), while securely logging the exact detailed exception object to backend systems using the `logging` module.
+
+## 2026-03-07 - MSAL OAuth CSRF Prevention
+**Vulnerability:** The application handled the OAuth callback from MSAL by exchanging the authorization code without checking the `state` parameter. This exposed the application to Cross-Site Request Forgery (CSRF) during the authentication flow, where an attacker could inject their own authorization code into a victim's session.
+**Learning:** OAuth 2.0 flows without state validation are inherently vulnerable to CSRF login attacks. Even standard libraries like MSAL require the developer to explicitly generate, pass, and validate the `state` token on the callback.
+**Prevention:** Generate a secure random token (e.g., using `secrets.token_urlsafe()`), store it in a secure cookie before redirecting to the identity provider, pass it in the authorization request, and strictly validate it against the returned state on the callback before exchanging the code.
