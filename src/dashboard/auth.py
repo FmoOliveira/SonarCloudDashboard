@@ -24,7 +24,7 @@ def get_msal_client():
         client_credential=client_secret
     )
 
-def get_auth_url():
+def get_auth_url(state=None):
     """Generates the authorization URL for the user to sign in."""
     client = get_msal_client()
     try:
@@ -36,9 +36,13 @@ def get_auth_url():
     # We request the basic profile scopes
     scopes = ["User.Read"]
     
+    kwargs = {"redirect_uri": redirect_uri}
+    if state:
+        kwargs["state"] = state
+
     auth_url = client.get_authorization_request_url(
         scopes,
-        redirect_uri=redirect_uri
+        **kwargs
     )
     return auth_url
 
@@ -76,7 +80,7 @@ def get_user_photo(access_token: str) -> str:
 def logout(cookies=None):
     """Clears the authentication from cookies."""
     if cookies is not None:
-        for key in ["auth_token", "user_info_name", "user_photo"]:
+        for key in ["auth_token", "user_info_name", "user_photo", "auth_state"]:
             if key in cookies:
                 del cookies[key]
         cookies.save()

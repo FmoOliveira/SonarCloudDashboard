@@ -11,10 +11,9 @@ if hasattr(st, 'cache'):
 
 import pandas as pd
 import html
-from datetime import datetime
 import os
+import secrets
 import gc
-import logging
 import sys
 from streamlit_cookies_manager import CookieManager
 
@@ -86,7 +85,18 @@ def main():
     
     if not auth_token and "code" in st.query_params:
         auth_code = st.query_params["code"]
+        returned_state = st.query_params.get("state")
         st.query_params.clear()
+
+        expected_state = cookies.get("auth_state")
+        if "auth_state" in cookies:
+            del cookies["auth_state"]
+            cookies.save()
+
+        if not expected_state or returned_state != expected_state:
+            st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
+            st.stop()
+
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
             if "access_token" in token_result:
@@ -117,7 +127,14 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-        auth_url = get_auth_url()
+
+        state = cookies.get("auth_state")
+        if not state:
+            state = secrets.token_urlsafe(32)
+            cookies["auth_state"] = state
+            cookies.save()
+
+        auth_url = get_auth_url(state=state)
         with st.sidebar:
             render_theme_toggle()
         
@@ -186,7 +203,7 @@ def main():
         with st.spinner("Loading telemetry..."):
             if is_demo_mode:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
-                df = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
+                _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
                 st.session_state['metrics_data_parquet'] = b"" # simplified for demo
             else:
                 st.session_state['metrics_data_parquet'] = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)

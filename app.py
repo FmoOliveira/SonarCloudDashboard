@@ -14,6 +14,7 @@ import plotly.express as px
 import html
 from datetime import datetime, timedelta
 import os
+import secrets
 import gc
 import logging
 from sonarcloud_api import SonarCloudAPI
@@ -485,8 +486,18 @@ def main():
     # Process login if returning from Entra ID
     if not auth_token and "code" in st.query_params:
         auth_code = st.query_params["code"]
+        returned_state = st.query_params.get("state")
         st.query_params.clear()
         
+        expected_state = cookies.get("auth_state")
+        if "auth_state" in cookies:
+            del cookies["auth_state"]
+            cookies.save()
+
+        if not expected_state or returned_state != expected_state:
+            st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
+            st.stop()
+
         with st.spinner("Authenticating with Microsoft Entra ID..."):
             token_result = acquire_token_by_auth_code(auth_code)
             
@@ -541,7 +552,13 @@ def main():
         st.markdown("### Authentication Required")
         st.info("You must log in with your corporate account to access this dashboard.")
         
-        auth_url = get_auth_url()
+        state = cookies.get("auth_state")
+        if not state:
+            state = secrets.token_urlsafe(32)
+            cookies["auth_state"] = state
+            cookies.save()
+
+        auth_url = get_auth_url(state=state)
         with st.sidebar:
             render_theme_toggle()
             st.markdown("<br>", unsafe_allow_html=True)
