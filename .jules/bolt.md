@@ -13,3 +13,7 @@
 - **Anti-Pattern Found:** Redundant `O(N log N)` sorting within loops. In `dashboard_view.py`, `compute_metric_stats` was sorting the entire dataframe by date for *every single metric* calculated inside a loop, resulting in a time complexity of `O(M * N log N)`.
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
+
+- **Anti-Pattern Found:** Using `df.iterrows()` to iterate over a DataFrame to extract values (e.g., inside `inject_statistical_anomalies` for plotting markers). This results in extremely slow O(N) execution time and causes main-thread blocking during Plotly chart rendering.
+- **The Fix:** Replaced `df.iterrows()` with vectorized date extraction using `anomalies[date_col].unique()`.
+- **Why it Matters:** Vectorized Pandas operations bypass the overhead of Python-level loops, allowing Streamlit to maintain a lightning-fast UI execution loop.
