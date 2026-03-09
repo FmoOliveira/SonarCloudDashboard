@@ -11,10 +11,8 @@ if hasattr(st, 'cache'):
 
 import pandas as pd
 import html
-from datetime import datetime
 import os
 import gc
-import logging
 import sys
 from streamlit_cookies_manager import CookieManager
 
@@ -86,7 +84,21 @@ def main():
     
     if not auth_token and "code" in st.query_params:
         auth_code = st.query_params["code"]
+        url_state = st.query_params.get("state")
         st.query_params.clear()
+
+        # CSRF Protection: Verify the state token returned by Entra ID matches the one we stored
+        stored_state = cookies.get("auth_state")
+
+        if not stored_state or not url_state or stored_state != url_state:
+            logging.warning("CSRF validation failed: State token mismatch.")
+            st.error("Authentication failed: Invalid state token. Please try logging in again.", icon="🚨")
+            st.stop()
+
+        # Clear the state token now that it has been used
+        del cookies["auth_state"]
+        cookies.save()
+
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
             if "access_token" in token_result:
@@ -117,7 +129,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-        auth_url = get_auth_url()
+        auth_url = get_auth_url(cookies)
         with st.sidebar:
             render_theme_toggle()
         
@@ -137,7 +149,7 @@ def main():
         with st.spinner("Loading projects..."):
             projects = fetch_projects(api, organization)
         if not projects:
-            st.error("No projects found.")
+            st.error("No projects found.", icon="🚨")
             st.stop()
 
     with st.sidebar:
@@ -163,7 +175,8 @@ def main():
             "Project",
             options=[p['key'] for p in projects],
             format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
-            on_change=handle_project_change
+            on_change=handle_project_change,
+            help="Switching projects will clear the current data cache to optimize memory."
         )
         
         if is_demo_mode:
@@ -175,7 +188,7 @@ def main():
         with st.form(key="controls_form", border=False):
             date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
             days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
-            branch_filter = st.selectbox("Branch", options=branch_options) if branch_options else "master"
+            branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"
             execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 
         if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
@@ -183,24 +196,25 @@ def main():
             st.rerun()
 
     if execute_analysis:
-        with st.spinner("Loading telemetry..."):
+        with st.status("Loading telemetry...", expanded=True) as status:
             if is_demo_mode:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
-                df = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
+                _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
                 st.session_state['metrics_data_parquet'] = b"" # simplified for demo
             else:
                 st.session_state['metrics_data_parquet'] = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
+            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
 
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
         if not metrics_data.empty:
             display_dashboard(metrics_data, [st.session_state['data_project']], projects, st.session_state['data_branch'])
         else:
-            st.info("No data available.")
+            st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:
-        st.info("Select filters and click **Load Dashboard**.")
+        st.info("Select filters and click **Load Dashboard** to begin analysis.", icon="👋")
 
 if __name__ == "__main__":
     main()
