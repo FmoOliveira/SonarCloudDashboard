@@ -13,8 +13,8 @@ def get_msal_client():
         client_id = os.environ.get("AZURE_AD_CLIENT_ID") or st.secrets["azure_ad"]["client_id"]
         client_secret = os.environ.get("AZURE_AD_CLIENT_SECRET") or st.secrets["azure_ad"]["client_secret"]
     except KeyError as e:
-        logging.error(f"Missing Azure AD configuration: {e}")
-        st.error("Missing Azure AD configuration in environment or `.streamlit/secrets.toml`.", icon="🚨")
+        logging.error(f"Missing Azure AD configuration in `.streamlit/secrets.toml`: {e}")
+        st.error("Missing Azure AD configuration in `.streamlit/secrets.toml`.", icon="🚨")
         st.stop()
 
     authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -37,6 +37,11 @@ def get_auth_url(state: typing.Optional[str] = None):
     # We request the basic profile scopes
     scopes = ["User.Read"]
     
+    # Generate a CSRF token to prevent Cross-Site Request Forgery
+    state = secrets.token_urlsafe(32)
+    cookies["auth_state"] = state
+    cookies.save()
+
     auth_url = client.get_authorization_request_url(
         scopes,
         redirect_uri=redirect_uri,
