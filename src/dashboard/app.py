@@ -14,6 +14,7 @@ import html
 import os
 import gc
 import sys
+import secrets
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
@@ -84,23 +85,21 @@ def main():
     
     if not auth_token and "code" in st.query_params:
         auth_code = st.query_params["code"]
-        url_state = st.query_params.get("state")
+        returned_state = st.query_params.get("state")
         st.query_params.clear()
 
-        # CSRF Protection: Verify the state token returned by Entra ID matches the one we stored
         stored_state = cookies.get("auth_state")
-
-        if not stored_state or not url_state or stored_state != url_state:
-            logging.warning("CSRF validation failed: State token mismatch.")
-            st.error("Authentication failed: Invalid state token. Please try logging in again.", icon="🚨")
+        if not stored_state or returned_state != stored_state:
+            logging.error("CSRF warning: State token mismatch during authentication.")
+            st.error("Authentication failed: Invalid state token. Please try again.", icon="🚨")
             st.stop()
-
-        # Clear the state token now that it has been used
-        del cookies["auth_state"]
-        cookies.save()
 
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
+
+            # Clean up state cookie after successful validation
+            del cookies["auth_state"]
+            cookies.save()
             if "access_token" in token_result:
                 auth_token = token_result["access_token"]
                 cookies["auth_token"] = auth_token
@@ -129,7 +128,13 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-        auth_url = get_auth_url(cookies)
+
+        # Generate and store a secure state token for CSRF protection
+        if "auth_state" not in cookies:
+            cookies["auth_state"] = secrets.token_urlsafe(32)
+            cookies.save()
+
+        auth_url = get_auth_url(state=cookies["auth_state"])
         with st.sidebar:
             render_theme_toggle()
         

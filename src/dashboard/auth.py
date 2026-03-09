@@ -2,6 +2,7 @@ import streamlit as st
 import msal
 import logging
 import requests
+import typing
 
 import os
 
@@ -24,9 +25,7 @@ def get_msal_client():
         client_credential=client_secret
     )
 
-import secrets
-
-def get_auth_url(cookies):
+def get_auth_url(state: typing.Optional[str] = None):
     """Generates the authorization URL for the user to sign in."""
     client = get_msal_client()
     try:
