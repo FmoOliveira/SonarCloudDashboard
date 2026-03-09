@@ -673,6 +673,7 @@ def main():
                     "Branch Filter",
                     value="master",
                     help="No branches found. Enter branch name manually.",
+                    placeholder="e.g., main, master, feature/xyz",
                     label_visibility="collapsed"
                 )
             
@@ -802,7 +803,6 @@ def main():
                 compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
                 
             if not compressed_bytes:
-                st.error("No metrics data available.")
                 st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.stop()
                 
@@ -889,7 +889,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: Optional[str] = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -1223,6 +1223,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             default=st.session_state.active_metrics,
             format_func=lambda m: m.replace('_', ' ').title(),
             on_change=sync_multiselect_to_preset,
+            placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
