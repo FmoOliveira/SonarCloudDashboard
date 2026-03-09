@@ -23,11 +23,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_projects(_api, organization):
@@ -49,7 +51,7 @@ def fetch_project_branches(_api, project_key):
         st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
-def should_retry_api_call(exc: Exception) -> bool:
+def should_retry_api_call(exc: BaseException) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
@@ -62,7 +64,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -73,7 +75,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
         'minor_violations', 'violations'
     ]
-    params = {
+    params: dict[str, str | int] = {
         "component": project_key,
         "metrics": ",".join(metrics),
         "from": start_date.strftime('%Y-%m-%d'),
@@ -90,7 +92,10 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history = []
+        # ⚡ Bolt Optimization: Replaced O(N^2) list lookup `next((r for r in history...))`
+        # with an O(1) dictionary lookup keyed by date. This prevents blocking the asyncio
+        # event loop when processing thousands of historical data points per project.
+        history_dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -99,19 +104,20 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = next((r for r in history if r['date'] == date_val), None)
-                        if not record:
+                        if date_val not in history_dict:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
-                            history.append(record)
+                            history_dict[date_val] = record
+                        else:
+                            record = history_dict[date_val]
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
                         else:
                             record[metric_name] = int(float(value)) if '.' in value else int(value)
                             
-        return history
+        return list(history_dict.values())
 
 async def _fetch_all_projects_history(project_keys: list, token: str, days: int, branch: str) -> dict:
     connector = aiohttp.TCPConnector(limit_per_host=5)
