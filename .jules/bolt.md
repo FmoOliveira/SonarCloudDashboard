@@ -14,6 +14,9 @@
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
 
+- **Anti-Pattern Found:** Using `df.iterrows()` to loop through dataframes when processing visual dashboard components. In `dashboard_components.py`, `create_quality_gate_status` used `iterrows()` to manually calculate status conditions for each project individually.
+- **The Fix:** Replaced `.iterrows()` in `create_quality_gate_status` with vectorized operations using `np.select` and boolean masks to calculate the statuses across all projects simultaneously.
+- **Why it Matters:** Iterating over a Pandas dataframe row by row using `.iterrows()` is significantly slower than using vectorized operations (O(N) vs O(1) conceptually for dataframe manipulation). This replacement speeds up data processing before generating charts and dashboard metrics, preventing long main thread stalls on the UI rendering cycle.
 - **Performance Opportunity Found:** In `src/dashboard/data_service.py`, processing historical API data grouped by date was blocking the `asyncio` event loop due to an `O(N)` list lookup (`next((r for r in history if r['date'] == date_val), None)`) occurring inside a loop, resulting in `O(N^2)` time complexity.
 - **The Fix:** Switched the data structure from a list to a dictionary keyed by `date_val`, allowing `O(1)` access time and reducing overall time complexity to `O(N)`. The final result uses `list(history_dict.values())`.
 - **Why it Matters:** Heavy synchronous `O(N^2)` calculations block Python's asynchronous event loop, negating the benefits of `asyncio.gather` and slowing down concurrent API requests.
