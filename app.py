@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import gc
+from typing import Optional
 import logging
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import (
@@ -93,11 +94,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 # Initialize SonarCloud API
 @st.cache_resource
@@ -526,7 +529,8 @@ def main():
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
-                    st.error(f"Authentication failed: {error_desc}")
+                    logging.error(f"Authentication failed: {error_desc}")
+                    st.error("Authentication failed: An internal error occurred.")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -686,6 +690,7 @@ def main():
                     "Branch Filter",
                     value="master",
                     help="No branches found. Enter branch name manually.",
+                    placeholder="e.g., main, master, feature/xyz",
                     label_visibility="collapsed"
                 )
             
@@ -752,7 +757,8 @@ def main():
                 st.cache_data.clear()
 
             except Exception as e:
-                st.sidebar.error(f"Sync failed: {str(e)}")
+                logging.error(f"Sync failed: {str(e)}")
+                st.sidebar.error("Sync failed: An internal error occurred.")
                 
             finally:
                 # The DOM Purge (Architectural Key)
@@ -768,7 +774,8 @@ def main():
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
-            st.caption(f"Storage unavailable: {str(e)}")
+            logging.error(f"Storage unavailable: {str(e)}")
+            st.caption("Storage unavailable: An internal error occurred.")
             
     # Convert date range to days
     days_map = {
@@ -787,11 +794,12 @@ def main():
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
         # Fetch metrics for selected project
-        with st.spinner("Loading telemetry..."):
+        with st.status("Loading telemetry...", expanded=True) as status:
             if "--demo-mode" in sys.argv:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
                 if not os.path.exists(demo_path):
-                    st.error("Demo data not found. Please run `python demo/demo_generator.py` first.")
+                    status.update(label="Demo data missing.", state="error", expanded=True)
+                    st.error("Demo data not found. Please run `python demo/demo_generator.py` first.", icon="🚨")
                     st.stop()
                 
                 demo_df = pd.read_parquet(demo_path)
@@ -813,10 +821,11 @@ def main():
                 compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
                 
             if not compressed_bytes:
-                st.error("No metrics data available.")
+                status.update(label="No data found.", state="complete", expanded=False)
                 st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.stop()
                 
+            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
             # Store directly in Session State for instantaneous page transitions
             st.session_state['metrics_data_parquet'] = compressed_bytes
             
@@ -873,7 +882,8 @@ def fetch_projects(_api, organization):
     try:
         return _api.get_organization_projects(organization)
     except Exception as e:
-        st.error(f"Error fetching projects: {str(e)}")
+        logging.error(f"Error fetching projects: {str(e)}")
+        st.error("Error fetching projects: An internal error occurred.")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -882,10 +892,11 @@ def fetch_project_branches(_api, project_key):
     try:
         return _api.get_project_branches(project_key)
     except Exception as e:
-        st.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
         return []
 
-def should_retry_api_call(exc: Exception) -> bool:
+def should_retry_api_call(exc: BaseException) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
@@ -898,7 +909,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -909,7 +920,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
         'minor_violations', 'violations'
     ]
-    params = {
+    params: dict[str, str | int] = {
         "component": project_key,
         "metrics": ",".join(metrics),
         "from": start_date.strftime('%Y-%m-%d'),
@@ -926,7 +937,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history = []
+        history: list[dict] = []
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -935,19 +946,19 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = next((r for r in history if r['date'] == date_val), None)
+                        record = history_dict.get(date_val)
                         if not record:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
-                            history.append(record)
+                            history_dict[date_val] = record
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
                         else:
                             record[metric_name] = int(float(value)) if '.' in value else int(value)
                             
-        return history
+        return list(history_dict.values())
 
 async def _fetch_all_projects_history(project_keys: list, token: str, days: int, branch: str) -> dict:
     connector = aiohttp.TCPConnector(limit_per_host=5)
@@ -1232,6 +1243,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             default=st.session_state.active_metrics,
             format_func=lambda m: m.replace('_', ' ').title(),
             on_change=sync_multiselect_to_preset,
+            placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
