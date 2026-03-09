@@ -82,3 +82,8 @@
 **Vulnerability:** Internal system errors, such as database connection string errors and underlying Azure Table Storage SDK exceptions `str(e)`, were being directly rendered to the frontend via Streamlit's `st.error` UI elements.
 **Learning:** Exposing raw backend exception messages provides potential attackers with deep insight into the internal infrastructure, database schema, and potential entry points.
 **Prevention:** Use generic, safe error messages for user-facing UI elements (e.g., "An internal error occurred"), while securely logging the exact detailed exception object to backend systems using the `logging` module.
+
+## 2026-03-08 - Streamlit Error Leakage Fix
+**Vulnerability:** Internal error messages (e.g. from the Azure Table Storage SDK) were being directly rendered using `st.error()` and `st.warning()`, potentially leaking sensitive infrastructure details to the user.
+**Learning:** Error messages should be generic and not expose internal system details.
+**Prevention:** Replaced raw exception strings in `st.error()` with generic messages and logged the actual exceptions securely on the backend using `logging`.
