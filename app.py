@@ -92,11 +92,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 # Initialize SonarCloud API
 @st.cache_resource
@@ -881,7 +883,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -909,7 +911,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history = []
+        history: list[dict] = []
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
