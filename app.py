@@ -98,7 +98,7 @@ def get_secret(domain: str, key: str) -> str:
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error(error_msg, icon="🚨")
+        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
         st.stop()
         return ""
 
@@ -893,7 +893,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
+        st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:
