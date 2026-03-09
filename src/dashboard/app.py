@@ -84,7 +84,21 @@ def main():
     
     if not auth_token and "code" in st.query_params:
         auth_code = st.query_params["code"]
+        url_state = st.query_params.get("state")
         st.query_params.clear()
+
+        # CSRF Protection: Verify the state token returned by Entra ID matches the one we stored
+        stored_state = cookies.get("auth_state")
+
+        if not stored_state or not url_state or stored_state != url_state:
+            logging.warning("CSRF validation failed: State token mismatch.")
+            st.error("Authentication failed: Invalid state token. Please try logging in again.", icon="🚨")
+            st.stop()
+
+        # Clear the state token now that it has been used
+        del cookies["auth_state"]
+        cookies.save()
+
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
             if "access_token" in token_result:
@@ -115,7 +129,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-        auth_url = get_auth_url()
+        auth_url = get_auth_url(cookies)
         with st.sidebar:
             render_theme_toggle()
         

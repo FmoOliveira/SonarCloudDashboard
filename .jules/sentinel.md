@@ -82,6 +82,10 @@
 **Vulnerability:** Internal system errors, such as database connection string errors and underlying Azure Table Storage SDK exceptions `str(e)`, were being directly rendered to the frontend via Streamlit's `st.error` UI elements.
 **Learning:** Exposing raw backend exception messages provides potential attackers with deep insight into the internal infrastructure, database schema, and potential entry points.
 **Prevention:** Use generic, safe error messages for user-facing UI elements (e.g., "An internal error occurred"), while securely logging the exact detailed exception object to backend systems using the `logging` module.
+## 2026-03-08 - Streamlit OAuth CSRF Vulnerability
+**Vulnerability:** The OAuth authentication flow did not generate or validate a `state` parameter, making the application vulnerable to Cross-Site Request Forgery (CSRF). An attacker could trick an authenticated user into logging into the attacker's account by providing a malicious authorization code.
+**Learning:** Relying solely on the authorization code without state validation leaves the application open to CSRF attacks during the OAuth flow.
+**Prevention:** Always generate a secure, random `state` token (e.g., using `secrets.token_urlsafe()`), store it in a secure cookie, pass it to the authorization endpoint, and strictly validate that the returned `state` matches the stored token before exchanging the code for an access token.
 
 ## 2026-03-08 - Streamlit Error Leakage Fix
 **Vulnerability:** Internal error messages (e.g. from the Azure Table Storage SDK) were being directly rendered using `st.error()` and `st.warning()`, potentially leaking sensitive infrastructure details to the user.
