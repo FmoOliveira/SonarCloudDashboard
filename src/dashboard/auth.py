@@ -3,12 +3,14 @@ import msal
 import logging
 import requests
 
+import os
+
 def get_msal_client():
-    """Initializes the MSAL Confidential Client Application using st.secrets."""
+    """Initializes the MSAL Confidential Client Application using env vars or st.secrets."""
     try:
-        tenant_id = st.secrets["azure_ad"]["tenant_id"]
-        client_id = st.secrets["azure_ad"]["client_id"]
-        client_secret = st.secrets["azure_ad"]["client_secret"]
+        tenant_id = os.environ.get("AZURE_AD_TENANT_ID") or st.secrets["azure_ad"]["tenant_id"]
+        client_id = os.environ.get("AZURE_AD_CLIENT_ID") or st.secrets["azure_ad"]["client_id"]
+        client_secret = os.environ.get("AZURE_AD_CLIENT_SECRET") or st.secrets["azure_ad"]["client_secret"]
     except KeyError as e:
         logging.error(f"Missing Azure AD configuration in `.streamlit/secrets.toml`: {e}")
         st.error("Missing Azure AD configuration in `.streamlit/secrets.toml`.", icon="🚨")
@@ -26,9 +28,9 @@ def get_auth_url():
     """Generates the authorization URL for the user to sign in."""
     client = get_msal_client()
     try:
-        redirect_uri = st.secrets["azure_ad"]["redirect_uri"]
+        redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI") or st.secrets["azure_ad"]["redirect_uri"]
     except KeyError:
-        st.error("Missing `redirect_uri` in `.streamlit/secrets.toml` under `azure_ad`.", icon="🚨")
+        st.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.", icon="🚨")
         st.stop()
         
     # We request the basic profile scopes
@@ -44,9 +46,9 @@ def acquire_token_by_auth_code(auth_code: str):
     """Exchanges the authorization code for an ID and Access token."""
     client = get_msal_client()
     try:
-        redirect_uri = st.secrets["azure_ad"]["redirect_uri"]
+        redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI") or st.secrets["azure_ad"]["redirect_uri"]
     except KeyError:
-        st.error("Missing `redirect_uri` in `.streamlit/secrets.toml` under `azure_ad`.", icon="🚨")
+        st.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.", icon="🚨")
         st.stop()
 
     scopes = ["User.Read"]

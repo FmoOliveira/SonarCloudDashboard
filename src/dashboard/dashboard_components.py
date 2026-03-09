@@ -49,7 +49,7 @@ def apply_modern_layout(fig):
         gridwidth=1,
         gridcolor=grid_color,
         tickfont=dict(color=font_color),
-        titlefont=dict(color=font_color),
+        title_font=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -59,7 +59,7 @@ def apply_modern_layout(fig):
         gridwidth=1,
         gridcolor=grid_color,
         tickfont=dict(color=font_color),
-        titlefont=dict(color=font_color),
+        title_font=dict(color=font_color),
         zeroline=False,
         showline=False
     )
@@ -67,7 +67,6 @@ def apply_modern_layout(fig):
 
 def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
-    # Escape user inputs to prevent XSS
     safe_title = html.escape(title)
     safe_value = html.escape(value)
     safe_icon = html.escape(icon_class)
@@ -75,23 +74,22 @@ def create_metric_card(title: str, value: str, icon_class: str, delta: str = Non
 
     delta_html = ""
     if delta:
-        # Escape delta to prevent XSS
         safe_delta = html.escape(delta)
         safe_color = html.escape(delta_color)
         delta_html = f"""
-<div style="font-size: 0.9rem; color: {safe_color}; margin-top: 0.6rem; font-weight: 500;">
-    {safe_delta} <span style="font-size: 0.8rem; color: var(--text-muted, #888888); font-weight: 400;">vs start</span>
+<div class="neon-delta" style="color: {safe_color};">
+    {safe_delta} <span class="neon-delta-label">vs start</span>
 </div>"""
 
     card_html = f"""
 <div class="neon-card {safe_neon_class}">
-    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.8rem;">
-        <i class="{safe_icon}" style="font-size: 2.2rem; filter: drop-shadow(0 0 8px currentColor);"></i>
+    <div class="neon-icon-container">
+        <i class="{safe_icon}"></i>
     </div>
-    <div style="color: var(--text-dim, #e0e0e0); font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; letter-spacing: 0.05em;">
+    <div class="neon-title">
         {safe_title}
     </div>
-    <div style="color: var(--text-main, #ffffff); font-size: 2.5rem; font-weight: 700; line-height: 1;">
+    <div class="neon-value">
         {safe_value}
     </div>
     {delta_html}
@@ -210,7 +208,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
             
             # Dynamic Y-axis scaling per subplot
             y_title = "Percentage %" if "density" in metric or "coverage" in metric else "Count"
-            fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, gridcolor='#2D3748', zeroline=False)
+            fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, zeroline=False)
 
     # Compute exact layout updates for every subplot X-axis to force Date continuity 
     # instead of categorical string fallbacks for Bar charts
@@ -234,12 +232,11 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         barmode='group' if chart_type == "Bar Chart" else None,
         margin=dict(l=20, r=20, t=60, b=20),
         **xaxis_updates,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
         showlegend=True,
         hovermode="x unified"
     )
 
+    fig = apply_modern_layout(fig)
     return fig
 
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
@@ -249,7 +246,7 @@ def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
         return
     
     # Get latest data for each project
-    latest_data = df.groupby('project_key')[metric].last().reset_index()
+    latest_data = df.groupby('project_key', observed=True)[metric].last().reset_index()
     latest_data['project_name'] = latest_data['project_key'].map(project_names)
     
     # Create bar chart
@@ -342,6 +339,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
         margin=dict(l=10, r=10, t=10, b=20)
     )
     
+    fig = apply_modern_layout(fig)
     return fig
 
 def create_rating_gauge(rating_value: float, title: str):
@@ -481,7 +479,7 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
         return
     
     # Get latest data for each project
-    latest_data = df.groupby('project_key').last().reset_index()
+    latest_data = df.groupby('project_key', observed=True).last().reset_index()
     latest_data['project_name'] = latest_data['project_key'].map(project_names)
     
     # Select numeric metrics for heatmap

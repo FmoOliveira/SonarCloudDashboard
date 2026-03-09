@@ -1,4 +1,14 @@
 import streamlit as st
+
+# Backward-compatibility monkey-patch for unmaintained third-party plugins using deprecated st.cache
+if hasattr(st, 'cache'):
+    def _safe_cache(*args, **kwargs):
+        # Remove legacy arguments that crash st.cache_data
+        kwargs.pop('suppress_st_warning', None)
+        kwargs.pop('allow_output_mutation', None)
+        kwargs.pop('hash_funcs', None)
+        return st.cache_data(*args, **kwargs)
+    st.cache = _safe_cache
 import pandas as pd
 import plotly.express as px
 import html
@@ -68,9 +78,15 @@ def handle_project_change():
 
 def get_secret(domain: str, key: str) -> str:
     """
-    Safely extracts secrets with O(1) dictionary lookup, 
+    Safely extracts secrets checking OS environment variables first, 
     enforcing strict validation before downstream API calls occur.
     """
+    # Azure Application Settings flatten environment variables, 
+    # so we intercept them directly from the OS first!
+    env_name = f"{domain.upper()}_{key.upper()}"
+    if env_name in os.environ:
+        return os.environ[env_name]
+        
     try:
         return st.secrets[domain][key]
     except FileNotFoundError:
@@ -168,30 +184,56 @@ def apply_theme_overrides() -> None:
             }
             
             /* BaseWeb Dropdown Menus (Rendered outside main DOM context) */
+            div[data-baseweb="popover"],
+            div[data-baseweb="popover"] > div {
+                background-color: #FFFFFF !important;
+            }
             div[data-baseweb="popover"] ul[role="listbox"],
-            div[data-baseweb="popover"] div[role="listbox"] {
+            div[data-baseweb="popover"] div[role="listbox"],
+            div[data-baseweb="popover"] li[role="option"],
+            ul[data-testid="stSelectboxVirtualDropdownEmpty"] {
                 background-color: #FFFFFF !important;
                 color: #1A1814 !important;
             }
-            div[data-baseweb="popover"] li[role="option"] {
+            ul[data-testid="stSelectboxVirtualDropdownEmpty"] li {
                 background-color: #FFFFFF !important;
-                color: #1A1814 !important;
+                color: #8C8A86 !important;
             }
             div[data-baseweb="popover"] li[role="option"]:hover,
             div[data-baseweb="popover"] li[aria-selected="true"] {
                 background-color: #F4F3EF !important;
                 color: #2563EB !important;
             }
+            div[data-baseweb="popover"] p,
+            div[data-baseweb="popover"] span,
+            div[data-baseweb="popover"] div {
+                color: #1A1814 !important;
+            }
 
             /* Buttons & Download CSV */
             div[data-testid="stButton"] > button,
-            div[data-testid="stDownloadButton"] > button {
+            div[data-testid="stDownloadButton"] > button,
+            div[data-testid="stForm"] button,
+            button[data-testid="stBaseButton-secondary"] {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
                 border-color: #1D4ED8 !important;
             }
+            div[data-testid="stButton"] > button p,
+            div[data-testid="stDownloadButton"] > button p,
+            div[data-testid="stButton"] > button span,
+            div[data-testid="stForm"] button p,
+            div[data-testid="stForm"] button span,
+            div[data-testid="stDownloadButton"] > button span,
+            button[data-testid="stBaseButton-secondary"] p,
+            button[data-testid="stBaseButton-secondary"] span,
+            button[data-testid="stBaseButton-secondary"] div {
+                color: #FFFFFF !important;
+            }
             div[data-testid="stButton"] > button:hover,
-            div[data-testid="stDownloadButton"] > button:hover {
+            div[data-testid="stDownloadButton"] > button:hover,
+            div[data-testid="stForm"] button:hover,
+            button[data-testid="stBaseButton-secondary"]:hover {
                 background-color: #1D4ED8 !important;
             }
 
@@ -217,24 +259,26 @@ def apply_theme_overrides() -> None:
             div[data-testid="stSegmentedControl"] {
                 background-color: transparent !important;
             }
-            div[data-testid="stBaseButton-segmented_control"],
-            div[data-testid="stBaseButton-pills"] {
+            button[data-testid="stBaseButton-pills"],
+            button[data-testid="stBaseButton-segmented_control"] {
                 background-color: #FFFFFF !important;
                 color: #1A1814 !important;
                 border: 1px solid #D5D0C5 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"] p,
-            div[data-testid="stBaseButton-pills"] p {
+            button[data-testid="stBaseButton-pills"] p,
+            button[data-testid="stBaseButton-segmented_control"] p {
                 color: #1A1814 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"],
-            div[data-testid="stBaseButton-pills"][aria-selected="true"] {
+            button[data-testid="stBaseButton-pillsActive"],
+            button[data-testid="stBaseButton-pills"][aria-selected="true"],
+            button[data-testid="stBaseButton-segmented_control"][aria-selected="true"] {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
                 border-color: #1D4ED8 !important;
             }
-            div[data-testid="stBaseButton-segmented_control"][aria-selected="true"] p,
-            div[data-testid="stBaseButton-pills"][aria-selected="true"] p {
+            button[data-testid="stBaseButton-pillsActive"] p,
+            button[data-testid="stBaseButton-pills"][aria-selected="true"] p,
+            button[data-testid="stBaseButton-segmented_control"][aria-selected="true"] p {
                 color: #FFFFFF !important;
             }
 
@@ -251,6 +295,167 @@ def apply_theme_overrides() -> None:
             /* Dark-to-Light Canvas Transform */
             div[data-testid="stDataFrame"] canvas {
                 filter: invert(1) hue-rotate(180deg) brightness(1.1) !important;
+            }
+            
+            /* Tooltips */
+            div[data-baseweb="tooltip"],
+            div[data-baseweb="tooltip"] > div {
+                background-color: #1A1814 !important;
+                color: #FFFFFF !important;
+                border-radius: 4px !important;
+            }
+            div[data-baseweb="tooltip"] * {
+                color: #FFFFFF !important;
+            }
+
+            /* Contextual Toolbars (Dataframe Hover Menus) */
+            div[data-testid="stElementToolbar"] {
+                background-color: rgba(255, 255, 255, 0.9) !important;
+                border: 1px solid #D5D0C5 !important;
+                border-radius: 4px !important;
+            }
+            div[data-testid="stElementToolbarButtonContainer"],
+            div[data-testid="stElementToolbarButtonContainer"] div,
+            button[kind="elementToolbar"] {
+                background-color: transparent !important;
+            }
+            button[kind="elementToolbar"]:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            button[kind="elementToolbar"] svg,
+            button[kind="elementToolbar"] svg path {
+                fill: rgba(26, 24, 20, 0.5) !important;
+                color: rgba(26, 24, 20, 0.5) !important;
+            }
+            button[kind="elementToolbar"] svg {
+                width: 1.25rem !important;
+                height: 1.25rem !important;
+            }
+            button[kind="elementToolbar"]:hover svg,
+            button[kind="elementToolbar"]:hover svg path {
+                fill: rgba(26, 24, 20, 0.95) !important;
+                color: rgba(26, 24, 20, 0.95) !important;
+            }
+            button[kind="elementToolbar"]:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            /* Plotly Native Modebar */
+            .modebar .modebar-group,
+            div.modebar-group {
+                background-color: rgba(255, 255, 255, 0.75) !important;
+            }
+            .modebar .modebar-btn svg,
+            .modebar .modebar-btn svg path,
+            a.modebar-btn svg,
+            a.modebar-btn svg path {
+                fill: rgba(26, 24, 20, 0.5) !important;
+            }
+            .modebar .modebar-btn.active svg,
+            .modebar .modebar-btn.active svg path,
+            .modebar .modebar-btn:hover svg,
+            .modebar .modebar-btn:hover svg path,
+            a.modebar-btn.active svg,
+            a.modebar-btn.active svg path,
+            a.modebar-btn:hover svg,
+            a.modebar-btn:hover svg path {
+                fill: rgba(26, 24, 20, 0.95) !important;
+            }
+            .modebar .modebar-btn:hover,
+            a.modebar-btn:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            /* Plotly Chart Substrate / iframe Background Fallbacks */
+            .stPlotlyChart iframe,
+            div[data-testid="stPlotlyChart"] iframe {
+                background-color: transparent !important;
+                color-scheme: light !important;
+            }
+
+            /* Dataframe Toolbar */
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] {
+                background-color: rgba(255, 255, 255, 0.75) !important;
+            }
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] button svg,
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] button svg path {
+                fill: rgba(26, 24, 20, 0.5) !important;
+            }
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] button:hover svg,
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] button:hover svg path {
+                fill: rgba(26, 24, 20, 0.95) !important;
+            }
+            div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] button:hover {
+                background-color: rgba(0, 0, 0, 0.05) !important;
+            }
+            
+            /* Global App Header (Deploy, Settings, Sidebar Toggle Menu) */
+            header[data-testid="stHeader"],
+            div[data-testid="stToolbar"] {
+                background-color: #F4F3EF !important;
+            }
+            div[data-testid="stToolbar"] button,
+            button[data-testid="stExpandSidebarButton"] {
+                color: #1A1814 !important;
+            }
+            div[data-testid="stToolbar"] button span,
+            div[data-testid="stToolbar"] svg,
+            button[data-testid="stExpandSidebarButton"] span,
+            button[data-testid="stExpandSidebarButton"] svg {
+                color: #1A1814 !important;
+                fill: #1A1814 !important;
+            }
+            
+            /* Light Theme Consolidation Overrides */
+            section[data-testid="stSidebar"],
+            div[data-testid="stSidebar"] {
+                background-color: #FFFFFF !important;
+            }
+            div[data-testid="stSidebar"] * {
+                color: #111827 !important;
+            }
+            div[data-testid="stSidebar"] svg,
+            div[data-testid="stSidebar"] svg path {
+                fill: #111827 !important;
+                color: #111827 !important;
+            }
+            div[data-testid="stPills"] button,
+            div[data-testid="stPills"] [role="radio"] {
+                background-color: #FFFFFF !important;
+                color: #111827 !important;
+                border: 1px solid #D1D5DB !important;
+            }
+            div[data-testid="stPills"] button[aria-checked="true"],
+            div[data-testid="stPills"] [role="radio"][aria-checked="true"] {
+                background-color: #2563EB !important;
+                color: #FFFFFF !important;
+                border-color: #1D4ED8 !important;
+            }
+            div[data-baseweb="select"] > div,
+            div[data-baseweb="input"] {
+                background-color: #FFFFFF !important;
+                color: #111827 !important;
+                border-color: #D1D5DB !important;
+            }
+            div[data-testid="stDataFrame"],
+            div[data-testid="stDataFrame"] table {
+                background-color: #FFFFFF !important;
+                color: #111827 !important;
+            }
+            div[data-testid="stDataFrame"] thead th {
+                background-color: #F3F4F6 !important;
+            }
+            div[data-testid="stDataFrame"] tbody tr:nth-child(even) {
+                background-color: #F9FAFB !important;
+            }
+            div[data-testid="stToggle"] label {
+                color: #1A1814 !important;
+            }
+            div[data-testid="stToggle"] div[role="switch"] {
+                background-color: #D5D0C5 !important;
+            }
+            div[data-testid="stToggle"] div[role="switch"][aria-checked="true"] {
+                background-color: #2563EB !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -397,7 +602,7 @@ def main():
         
         # Helper function for rendering Iconoir labels
         def render_icon_label(icon_class, text):
-            st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; color: inherit; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</div>', unsafe_allow_html=True)
+            st.markdown(f'<p style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; margin: 0; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</p>', unsafe_allow_html=True)
 
         render_icon_label("iconoir-building", "Project")
         selected_project = st.selectbox(
@@ -480,7 +685,7 @@ def main():
         # 4. Visually separate secondary administrative actions
         st.divider()
         
-        st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 600;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
+        st.markdown('<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-database-script"></i> Data Management</p>', unsafe_allow_html=True)
         
         # 1. Initialize the concurrency lock in session state
         if "is_syncing" not in st.session_state:
@@ -494,7 +699,7 @@ def main():
 
         # Secondary button spanning full width, protected by session state lock
         refresh_clicked = st.button(
-            "Refresh Azure Data", 
+            "Refresh Data", 
             type="secondary", 
             use_container_width=True, 
             icon=":material/sync:",
@@ -544,7 +749,7 @@ def main():
         try:
             if storage:
                 stored_projects = storage.get_stored_projects()
-                st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> <strong>{len(stored_projects)}</strong> projects in Azure Storage.</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
@@ -568,7 +773,7 @@ def main():
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
         # Fetch metrics for selected project
-        with st.status("Loading telemetry...", expanded=True) as status:
+        with st.spinner("Loading telemetry..."):
             if "--demo-mode" in sys.argv:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
                 if not os.path.exists(demo_path):
@@ -594,7 +799,7 @@ def main():
                 compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
                 
             if not compressed_bytes:
-                status.update(label="No metrics data available.", state="complete", expanded=False)
+                st.error("No metrics data available.")
                 st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.stop()
                 
@@ -603,7 +808,7 @@ def main():
             
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
-            status.update(label="Data successfully loaded and compressed!", state="complete", expanded=False)
+            st.toast("Data successfully loaded and compressed!", icon="✅")
         
     # Decompress only exactly when needed for the UI render
     metrics_data = pd.DataFrame()
@@ -835,7 +1040,7 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 agg_dict[col] = 'first'
             
             # Group by project_key and date, then aggregate
-            df = df.groupby(['project_key', 'date']).agg(agg_dict).reset_index()
+            df = df.groupby(['project_key', 'date'], observed=True).agg(agg_dict).reset_index()
             
             # Round numeric values to reasonable precision
             for col in available_numeric:
@@ -863,7 +1068,7 @@ def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True
     
     # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
     # by eliminating the Python-level iteration and using underlying C extensions
-    grouped = df_sorted.groupby('project_key', sort=False)[metric_col]
+    grouped = df_sorted.groupby('project_key', sort=False, observed=True)[metric_col]
     earliest_total = float(grouped.first().sum())
     latest_total = float(grouped.last().sum())
     project_count = grouped.ngroups
@@ -1102,7 +1307,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         
         # Add branch column if available
         if 'branch' in display_data.columns:
-            display_data['branch'] = display_data['branch'].fillna("").astype(str)
+            display_data['branch'] = display_data['branch'].astype(object).fillna("").astype(str)
         else:
             # Use the selected branch from the sidebar if available, otherwise empty string
             display_data['branch'] = branch_filter if branch_filter else ""
