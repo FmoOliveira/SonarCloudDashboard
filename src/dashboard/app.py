@@ -12,6 +12,7 @@ if hasattr(st, 'cache'):
 import pandas as pd
 import html
 import os
+import secrets
 import gc
 import sys
 import secrets
@@ -88,10 +89,13 @@ def main():
         returned_state = st.query_params.get("state")
         st.query_params.clear()
 
-        stored_state = cookies.get("auth_state")
-        if not stored_state or returned_state != stored_state:
-            logging.error("CSRF warning: State token mismatch during authentication.")
-            st.error("Authentication failed: Invalid state token. Please try again.", icon="🚨")
+        expected_state = cookies.get("auth_state")
+        if "auth_state" in cookies:
+            del cookies["auth_state"]
+            cookies.save()
+
+        if not expected_state or returned_state != expected_state:
+            st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
             st.stop()
 
         with st.spinner("Authenticating..."):
@@ -129,12 +133,13 @@ def main():
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
 
-        # Generate and store a secure state token for CSRF protection
-        if "auth_state" not in cookies:
-            cookies["auth_state"] = secrets.token_urlsafe(32)
+        state = cookies.get("auth_state")
+        if not state:
+            state = secrets.token_urlsafe(32)
+            cookies["auth_state"] = state
             cookies.save()
 
-        auth_url = get_auth_url(state=cookies["auth_state"])
+        auth_url = get_auth_url(state=state)
         with st.sidebar:
             render_theme_toggle()
         
