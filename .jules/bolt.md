@@ -14,6 +14,9 @@
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
 
+- **Anti-Pattern Found:** Using `df.iterrows()` to iterate over a DataFrame to extract values (e.g., inside `inject_statistical_anomalies` for plotting markers). This results in extremely slow O(N) execution time and causes main-thread blocking during Plotly chart rendering.
+- **The Fix:** Replaced `df.iterrows()` with vectorized date extraction using `anomalies[date_col].unique()`.
+- **Why it Matters:** Vectorized Pandas operations bypass the overhead of Python-level loops, allowing Streamlit to maintain a lightning-fast UI execution loop.
 - **Anti-Pattern Found:** Using `df.iterrows()` to loop through dataframes when processing visual dashboard components. In `dashboard_components.py`, `create_quality_gate_status` used `iterrows()` to manually calculate status conditions for each project individually.
 - **The Fix:** Replaced `.iterrows()` in `create_quality_gate_status` with vectorized operations using `np.select` and boolean masks to calculate the statuses across all projects simultaneously.
 - **Why it Matters:** Iterating over a Pandas dataframe row by row using `.iterrows()` is significantly slower than using vectorized operations (O(N) vs O(1) conceptually for dataframe manipulation). This replacement speeds up data processing before generating charts and dashboard metrics, preventing long main thread stalls on the UI rendering cycle.

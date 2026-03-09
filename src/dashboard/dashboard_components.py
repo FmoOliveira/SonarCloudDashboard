@@ -556,9 +556,11 @@ def inject_statistical_anomalies(
         # 4. Filter for positive anomalies (we only care about quality degradation)
         anomalies = df_sorted[(z_scores > z_threshold)]
         
-        for idx, row in anomalies.iterrows():
-            anomaly_date = row[date_col]
-            
+        # ⚡ Bolt Optimization: Replace O(N) df.iterrows() with O(1) vectorized date extraction
+        # to prevent main-thread UI blocking during Plotly render on large datasets.
+        unique_anomaly_dates = anomalies[date_col].unique()
+
+        for anomaly_date in unique_anomaly_dates:
             if anomaly_date not in flagged_dates:
                 # 5. Inject the UI Marker (Cast Timestamp to Unix milliseconds to prevent Plotly annotation TypeErrors)
                 fig.add_vline(
