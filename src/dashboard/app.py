@@ -171,12 +171,15 @@ def main():
         
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         
+        # ⚡ Bolt Optimization: Map projects list to a dictionary for O(1) format_func
+        # lookup in the Streamlit render loop. The old `next(generator)` was O(M*N).
+        project_names = {p['key']: p['name'] for p in projects}
+
         selected_project = st.selectbox(
             "Project",
             options=[p['key'] for p in projects],
-            format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
-            on_change=handle_project_change,
-            help="Switching projects will clear the current data cache to optimize memory."
+            format_func=lambda x: project_names.get(x, x),
+            on_change=handle_project_change
         )
         
         if is_demo_mode:

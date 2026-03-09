@@ -51,7 +51,7 @@ def fetch_project_branches(_api, project_key):
         st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
-def should_retry_api_call(exc: Exception) -> bool:
+def should_retry_api_call(exc: BaseException) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
@@ -75,7 +75,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
         'minor_violations', 'violations'
     ]
-    params = {
+    params: dict[str, str | int] = {
         "component": project_key,
         "metrics": ",".join(metrics),
         "from": start_date.strftime('%Y-%m-%d'),
@@ -92,8 +92,9 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        # ⚡ Bolt Optimization: Replaced O(N) list lookup with O(1) dictionary hashing
-        # This prevents the nested loop from becoming O(N^2) and blocking the asyncio event loop
+        # ⚡ Bolt Optimization: Replaced O(N^2) list lookup `next((r for r in history...))`
+        # with an O(1) dictionary lookup keyed by date. This prevents blocking the asyncio
+        # event loop when processing thousands of historical data points per project.
         history_dict = {}
         if 'measures' in data:
             for measure in data['measures']:

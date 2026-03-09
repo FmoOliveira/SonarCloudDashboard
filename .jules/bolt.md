@@ -14,6 +14,13 @@
 - **The Fix:** Lifted the sort operation out of the metric loop. The dataframe is now sorted once (`df.sort_values('date')`) before being passed into the sequential `compute_metric_stats` calls, reducing complexity to `O(N log N)`.
 - **Why it Matters:** Avoids repeatedly paying the sorting cost on large datasets, preventing unneeded main-thread blocking during the UI rerun cycle.
 
+- **Performance Opportunity Found:** In `src/dashboard/data_service.py`, processing historical API data grouped by date was blocking the `asyncio` event loop due to an `O(N)` list lookup (`next((r for r in history if r['date'] == date_val), None)`) occurring inside a loop, resulting in `O(N^2)` time complexity.
+- **The Fix:** Switched the data structure from a list to a dictionary keyed by `date_val`, allowing `O(1)` access time and reducing overall time complexity to `O(N)`. The final result uses `list(history_dict.values())`.
+- **Why it Matters:** Heavy synchronous `O(N^2)` calculations block Python's asynchronous event loop, negating the benefits of `asyncio.gather` and slowing down concurrent API requests.
+
+- **Anti-Pattern Found:** The `st.selectbox` UI component in `src/dashboard/app.py` was iterating over the `projects` list for each rendered option in its `format_func` parameter, executing `next((p['name'] for p in projects if p['key'] == x), x)`. This evaluates in `O(M * N)` time.
+- **The Fix:** Created a `project_names` dictionary mapped to the list, enabling `O(1)` lookups via `project_names.get(x, x)` inside the `format_func`.
+- **Why it Matters:** Streamlit re-runs the script frequently. Inefficient list lookups in UI rendering logic block the main thread and degrade application responsiveness.
 - **Anti-Pattern Found:** Utilizing $O(N)$ list lookups (`next((r for r in history if r['date'] == date_val), None)`) inside nested loops when parsing large JSON payloads blocks the main execution thread.
 - **The Fix:** Refactored the data parsing logic in `fetch_sonar_history_async` to use an $O(1)$ dictionary lookup keyed by the `date` attribute.
 - **Why it Matters:** This optimization reduces the time complexity of the JSON parsing step from $O(N^2)$ to $O(N)$. Because `asyncio` runs in a single thread, any heavy, blocking CPU-bound code like a slow $O(N^2)$ nested loop will freeze the entire event loop and delay rendering.
