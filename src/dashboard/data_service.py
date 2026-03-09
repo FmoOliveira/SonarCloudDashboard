@@ -4,7 +4,6 @@ import asyncio
 import aiohttp
 import logging
 import os
-import sys
 from datetime import datetime, timedelta
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
 from sonarcloud_api import SonarCloudAPI

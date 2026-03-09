@@ -149,7 +149,7 @@ def main():
         with st.spinner("Loading projects..."):
             projects = fetch_projects(api, organization)
         if not projects:
-            st.error("No projects found.")
+            st.error("No projects found.", icon="🚨")
             st.stop()
 
     with st.sidebar:
@@ -175,7 +175,8 @@ def main():
             "Project",
             options=[p['key'] for p in projects],
             format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
-            on_change=handle_project_change
+            on_change=handle_project_change,
+            help="Switching projects will clear the current data cache to optimize memory."
         )
         
         if is_demo_mode:
@@ -187,7 +188,7 @@ def main():
         with st.form(key="controls_form", border=False):
             date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
             days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
-            branch_filter = st.selectbox("Branch", options=branch_options) if branch_options else "master"
+            branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"
             execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 
         if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
@@ -211,9 +212,9 @@ def main():
         if not metrics_data.empty:
             display_dashboard(metrics_data, [st.session_state['data_project']], projects, st.session_state['data_branch'])
         else:
-            st.info("No data available.")
+            st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:
-        st.info("Select filters and click **Load Dashboard**.")
+        st.info("Select filters and click **Load Dashboard** to begin analysis.", icon="👋")
 
 if __name__ == "__main__":
     main()
