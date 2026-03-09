@@ -23,11 +23,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_projects(_api, organization):
@@ -62,7 +64,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -90,9 +92,9 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        # ⚡ Bolt Optimization: Replace O(N) list lookup with O(1) dictionary hashing.
-        # This reduces time complexity from O(M*N^2) to O(M*N) when iterating over measures and dates.
-        history_dict: dict[str, dict] = {}
+        # ⚡ Bolt Optimization: Replaced O(N) list lookup with O(1) dictionary hashing
+        # This prevents the nested loop from becoming O(N^2) and blocking the asyncio event loop
+        history_dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -101,12 +103,13 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = history_dict.get(date_val)
-                        if not record:
+                        if date_val not in history_dict:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
                             history_dict[date_val] = record
+                        else:
+                            record = history_dict[date_val]
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
