@@ -15,6 +15,7 @@ import html
 from datetime import datetime, timedelta
 import os
 import gc
+from typing import Optional
 import logging
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import (
@@ -92,11 +93,13 @@ def get_secret(domain: str, key: str) -> str:
     except FileNotFoundError:
         st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
         st.stop()
+        return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
         st.error(error_msg, icon="🚨")
         st.stop()
+        return ""
 
 # Initialize SonarCloud API
 @st.cache_resource
@@ -516,7 +519,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed.")
+                    st.error("Authentication failed: An internal error occurred.")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -737,7 +740,7 @@ def main():
 
             except Exception as e:
                 logging.error(f"Sync failed: {str(e)}")
-                st.sidebar.error("Sync failed.")
+                st.sidebar.error("Sync failed: An internal error occurred.")
                 
             finally:
                 # The DOM Purge (Architectural Key)
@@ -754,7 +757,7 @@ def main():
                     st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
         except Exception as e:
             logging.error(f"Storage unavailable: {str(e)}")
-            st.caption("Storage unavailable.")
+            st.caption("Storage unavailable: An internal error occurred.")
             
     # Convert date range to days
     days_map = {
@@ -860,7 +863,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects.")
+        st.error("Error fetching projects: An internal error occurred.")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -870,7 +873,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning(f"Could not fetch branches for {project_key}.")
+        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: Exception) -> bool:
@@ -886,7 +889,7 @@ def should_retry_api_call(exc: Exception) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str = None) -> list:
+async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: Optional[str] = None) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -914,9 +917,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        # ⚡ Bolt Optimization: Replace O(N) list lookup with O(1) dictionary hashing.
-        # This reduces time complexity from O(M*N^2) to O(M*N) when iterating over measures and dates.
-        history_dict: dict[str, dict] = {}
+        history: list[dict] = []
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
