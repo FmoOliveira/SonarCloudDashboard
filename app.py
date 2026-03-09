@@ -777,11 +777,12 @@ def main():
     # Only fetch and display data when execute button is clicked
     if execute_analysis:
         # Fetch metrics for selected project
-        with st.spinner("Loading telemetry..."):
+        with st.status("Loading telemetry...", expanded=True) as status:
             if "--demo-mode" in sys.argv:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
                 if not os.path.exists(demo_path):
-                    st.error("Demo data not found. Please run `python demo/demo_generator.py` first.")
+                    status.update(label="Demo data missing.", state="error", expanded=True)
+                    st.error("Demo data not found. Please run `python demo/demo_generator.py` first.", icon="🚨")
                     st.stop()
                 
                 demo_df = pd.read_parquet(demo_path)
@@ -803,9 +804,11 @@ def main():
                 compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
                 
             if not compressed_bytes:
+                status.update(label="No data found.", state="complete", expanded=False)
                 st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.stop()
                 
+            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
             # Store directly in Session State for instantaneous page transitions
             st.session_state['metrics_data_parquet'] = compressed_bytes
             
@@ -876,7 +879,7 @@ def fetch_project_branches(_api, project_key):
         st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
         return []
 
-def should_retry_api_call(exc: Exception) -> bool:
+def should_retry_api_call(exc: BaseException) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
@@ -900,7 +903,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
         'minor_violations', 'violations'
     ]
-    params = {
+    params: dict[str, str | int] = {
         "component": project_key,
         "metrics": ",".join(metrics),
         "from": start_date.strftime('%Y-%m-%d'),
