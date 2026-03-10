@@ -65,7 +65,9 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+from typing import Optional
+
+def create_metric_card(title: str, value: str, icon_class: str, delta: Optional[str] = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
@@ -147,20 +149,25 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
         xaxis_range = [x_min, x_max]
         
         # Prevent intraday ticks (duplicate dates) on short timeframes
-        dtick_val = 86400000.0 if time_delta.days <= 14 else None
+        dtick_val: Optional[float] = 86400000.0 if time_delta.days <= 14 else None
     else:
         xaxis_range = None
         dtick_val = None
 
     projects = plot_data['project_name'].unique()
     
+    # ⚡ Bolt Optimization: Pre-group the dataframe into a dictionary to replace O(N)
+    # boolean indexing inside the nested loop with an O(1) hash map lookup.
+    # This reduces time complexity from O(M * P * N) to O(N) for grouping + O(1) loop lookups.
+    grouped_projects = {name: group for name, group in plot_data.groupby('project_name', observed=True)}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             row_idx = i + 1 
             
             # Add a trace for each project
             for j, project in enumerate(projects):
-                project_data = plot_data[plot_data['project_name'] == project]
+                project_data = grouped_projects.get(project, pd.DataFrame())
                 
                 is_single_project = len(projects) == 1
                 
@@ -210,19 +217,20 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
             y_title = "Percentage %" if "density" in metric or "coverage" in metric else "Count"
             fig.update_yaxes(title_text=y_title, row=row_idx, col=1, showgrid=True, zeroline=False)
 
+    from typing import Any
     # Compute exact layout updates for every subplot X-axis to force Date continuity 
     # instead of categorical string fallbacks for Bar charts
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        axis_dict = dict(
+        axis_dict: dict[str, Any] = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
             zeroline=False,
             tickformat="%Y-%m-%d"
         )
-        if dtick_val:
+        if dtick_val is not None:
             axis_dict['dtick'] = dtick_val
             
         xaxis_updates[axis_key] = axis_dict
