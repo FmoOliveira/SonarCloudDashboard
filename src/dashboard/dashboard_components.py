@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import io
 import html
+import typing
 
 # Modern dashboard palette
 CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -65,7 +66,7 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+def create_metric_card(title: str, value: str, icon_class: str, delta: str | None = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
@@ -154,13 +155,19 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 
     projects = plot_data['project_name'].unique()
     
+    # ⚡ Bolt Optimization: Pre-group dataframe by project outside the nested loop.
+    # Replaces O(N) boolean indexing (plot_data[plot_data['project_name'] == project])
+    # inside an O(M * P) loop with an O(N) grouping and O(1) dictionary lookups.
+    # This prevents main-thread blocking during heavy Plotly rendering.
+    project_data_dict = {project: group for project, group in plot_data.groupby('project_name', observed=True)}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             row_idx = i + 1 
             
             # Add a trace for each project
             for j, project in enumerate(projects):
-                project_data = plot_data[plot_data['project_name'] == project]
+                project_data = project_data_dict.get(project, pd.DataFrame())
                 
                 is_single_project = len(projects) == 1
                 
@@ -215,7 +222,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        axis_dict = dict(
+        axis_dict: dict[str, typing.Any] = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
