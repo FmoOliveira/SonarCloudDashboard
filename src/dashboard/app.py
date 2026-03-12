@@ -15,7 +15,7 @@ import os
 import secrets
 import gc
 import sys
-import secrets
+import logging
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
@@ -118,8 +118,8 @@ def main():
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
-                    error_msg = f"Authentication failed: {error_desc}"
-                    st.error(error_msg)
+                    logging.error(f"Authentication failed: {error_desc}")
+                    st.error("Authentication failed: An internal error occurred.")
                     st.stop()
 
     if auth_token:

@@ -72,7 +72,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch projects: {str(e)}")
-            st.error("Failed to fetch projects.")
+            st.error("Failed to fetch projects. An internal error occurred.")
             return []
     
     def get_project_measures(self, project_key: str, branch: str = None) -> Optional[Dict]:
@@ -132,7 +132,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.warning(f"Failed to fetch measures for {project_key}: {str(e)}")
-            st.warning(f"Failed to fetch measures for {project_key}.")
+            st.warning(f"Failed to fetch measures for {project_key}. An internal error occurred.")
             return None
     
     def get_project_history(self, project_key: str, days: int, branch: str = None) -> List[Dict]:
@@ -220,7 +220,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.warning(f"Failed to fetch history for {project_key}: {str(e)}")
-            st.warning(f"Failed to fetch history for {project_key}.")
+            st.warning(f"Failed to fetch history for {project_key}. An internal error occurred.")
             return []
     
     def get_organization_metrics(self, organization: str) -> Dict:
@@ -259,7 +259,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch organization metrics: {str(e)}")
-            st.error("Failed to fetch organization metrics.")
+            st.error("Failed to fetch organization metrics. An internal error occurred.")
             return {}
     
     def get_project_branches(self, project_key: str) -> List[Dict]:
@@ -272,5 +272,5 @@ class SonarCloudAPI:
             return response.get('branches', [])
         except Exception as e:
             logging.warning(f"Failed to fetch branches for {project_key}: {str(e)}")
-            st.warning(f"Failed to fetch branches for {project_key}.")
+            st.warning(f"Failed to fetch branches for {project_key}. An internal error occurred.")
             return []
