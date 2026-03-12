@@ -4,7 +4,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import List, Dict, Optional
 import streamlit as st
-import logging
 
 class SonarCloudAPI:
     """SonarCloud API client for fetching organization and project metrics"""

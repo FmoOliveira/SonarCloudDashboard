@@ -2,7 +2,6 @@ import streamlit as st
 import msal
 import logging
 import requests
-import typing
 
 import os
 
