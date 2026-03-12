@@ -937,7 +937,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history: list[dict] = []
+        history_dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -946,12 +946,13 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = history_dict.get(date_val)
-                        if not record:
+                        if date_val not in history_dict:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
                             history_dict[date_val] = record
+                        else:
+                            record = history_dict[date_val]
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)

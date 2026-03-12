@@ -24,7 +24,8 @@ def get_storage_client() -> StorageInterface | None:
                 conn_string = os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or st.secrets["azure_storage"]["connection_string"]
                 return AzureTableStorage(conn_string)
             except KeyError:
-                st.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.", icon="🚨")
+                logging.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.")
+                st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
                 st.stop()
                 
         elif provider == "postgres":
@@ -39,7 +40,8 @@ def get_storage_client() -> StorageInterface | None:
             st.stop()
             
     except FileNotFoundError:
-        st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
+        logging.error("Security Configuration Error: `secrets.toml` is missing.")
+        st.error("Security Configuration Error: A required configuration file is missing.", icon="🚨")
         st.stop()
     except Exception as e:
         logging.critical(f"Database Factory Initialization Error: {str(e)}")
