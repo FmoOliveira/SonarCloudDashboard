@@ -104,7 +104,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     Dynamically scales height based on the number of metrics.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     num_metrics = len(metrics)
@@ -133,7 +133,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     if 'date' in plot_data.columns:
         plot_data = plot_data.sort_values('date')
     else:
-        st.warning("No date information available for trend analysis.")
+        st.info("No date information available for trend analysis. Please try adjusting your filters.", icon="ℹ️")
         return
 
     from datetime import timedelta
@@ -242,7 +242,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     """Create a bar chart comparing projects"""
     if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+        st.info("No data available for the selected metric. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
@@ -277,7 +277,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     Renders an overlaid area chart optimized for dark mode visibility.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     fig = go.Figure()
@@ -405,7 +405,7 @@ def create_coverage_donut(coverage_value: float):
 def create_quality_gate_status(projects_data: pd.DataFrame):
     """Create a summary of quality gate status across projects"""
     if projects_data.empty:
-        st.warning("No project data available.")
+        st.info("No project data available. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Mock quality gate status based on metrics
@@ -477,7 +477,7 @@ def format_metric_value(metric: str, value):
 def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     """Create a heatmap of metrics across projects"""
     if df.empty:
-        st.warning("No data available for heatmap.")
+        st.info("No data available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
@@ -489,7 +489,7 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     available_metrics = [m for m in numeric_metrics if m in latest_data.columns]
     
     if not available_metrics:
-        st.warning("No numeric metrics available for heatmap.")
+        st.info("No numeric metrics available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Prepare data for heatmap
