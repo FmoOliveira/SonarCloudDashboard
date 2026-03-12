@@ -32,3 +32,5 @@ Critical UX learnings and observations only.
 ### Empty States
 *   **Observation**: An empty dataframe or chart looks like a bug.
 *   **Fix**: Always check for `if df.empty:` and render a helpful `st.info` or `st.warning` message explaining why no data is shown (e.g., "No data found for the selected time range.").
+
+* Using explicit icons on feedback widgets (`st.info`, `st.warning`, `st.error`) drastically improves visual hierarchy. Users can scan errors or warnings quickly. This was missing in several places in the dashboard which resulted in inconsistent visual state representations.

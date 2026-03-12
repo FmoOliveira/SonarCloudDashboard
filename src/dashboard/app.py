@@ -119,7 +119,7 @@ def main():
                     st.rerun()
                 else:
                     error_msg = f"Authentication failed: {error_desc}"
-                    st.error(error_msg)
+                    st.error(error_msg, icon="🚨")
                     st.stop()
 
     if auth_token:
