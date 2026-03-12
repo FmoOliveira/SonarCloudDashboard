@@ -15,7 +15,6 @@ import os
 import secrets
 import gc
 import sys
-import secrets
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI

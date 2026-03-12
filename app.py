@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import gc
-from typing import Optional
 import logging
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import (
@@ -937,7 +936,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history: list[dict] = []
+        history_dict: dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
