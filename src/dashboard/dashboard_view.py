@@ -192,6 +192,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             default=st.session_state.active_metrics,
             format_func=lambda m: m.replace('_', ' ').title(),
             on_change=sync_multiselect_to_preset,
+            placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
         )
 
