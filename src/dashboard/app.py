@@ -159,7 +159,7 @@ def main():
         with st.spinner("Loading projects..."):
             projects = fetch_projects(api, organization)
         if not projects:
-            st.error("No projects found.", icon="🚨")
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
             st.stop()
 
     with st.sidebar:
@@ -189,7 +189,8 @@ def main():
             "Project",
             options=[p['key'] for p in projects],
             format_func=lambda x: project_names.get(x, x),
-            on_change=handle_project_change
+            on_change=handle_project_change,
+            help="Select a repository to view its metrics."
         )
         
         if is_demo_mode:
@@ -255,7 +256,11 @@ def main():
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
         if not metrics_data.empty:
-            display_dashboard(metrics_data, [st.session_state['data_project']], projects, st.session_state['data_branch'])
+            data_project = st.session_state['data_project']
+            data_branch = st.session_state['data_branch']
+            project_name = project_names.get(data_project, data_project)
+            st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
+            display_dashboard(metrics_data, [data_project], projects, data_branch)
         else:
             st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:

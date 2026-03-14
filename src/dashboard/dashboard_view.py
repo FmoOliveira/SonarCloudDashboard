@@ -178,7 +178,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         selection_mode="single",
         key="preset_selector",
         default=st.session_state.active_preset,
-        on_change=sync_preset_to_multiselect
+        on_change=sync_preset_to_multiselect,
+        help="Quickly switch between pre-configured metric combinations for analysis."
     )
     
     col1, col2 = st.columns([2, 1])
@@ -216,10 +217,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.")
-        st.stop()
+        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
         
-    if not df.empty:
+    if not df.empty and confirmed_metrics:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
