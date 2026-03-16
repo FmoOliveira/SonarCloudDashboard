@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import io
 import html
-import typing
+from typing import Optional
 
 # Modern dashboard palette
 CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -66,7 +66,7 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str | None = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+def create_metric_card(title: str, value: str, icon_class: str, delta: Optional[str] = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
@@ -222,7 +222,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        axis_dict: dict[str, typing.Any] = dict(
+        axis_dict: dict = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
