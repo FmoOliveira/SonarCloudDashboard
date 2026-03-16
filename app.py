@@ -41,7 +41,7 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}")
+        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -529,7 +529,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -553,7 +553,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
         st.markdown("### Authentication Required")
-        st.info("You must log in with your corporate account to access this dashboard.")
+        st.info("You must log in with your corporate account to access this dashboard.", icon="🔐")
         
         state = cookies.get("auth_state")
         if not state:
@@ -598,7 +598,7 @@ def main():
             projects = fetch_projects(api, organization)
             
         if not projects:
-            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
             st.stop()
 
     # Sidebar for controls
@@ -638,7 +638,7 @@ def main():
         )
         
         if not selected_project:
-            st.warning("Please select a project.")
+            st.warning("Please select a project.", icon="⚠️")
             st.stop()
             
         if is_demo_mode:
@@ -775,7 +775,7 @@ def main():
                 stored_projects = storage.get_stored_projects()
                 st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).", icon="⚠️")
         except Exception as e:
             logging.error(f"Storage unavailable: {str(e)}")
             st.caption("Storage unavailable: An internal error occurred.")
@@ -848,7 +848,7 @@ def main():
         project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
         
         # Single consolidated info block
-        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**")
+        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="ℹ️")
         
         display_dashboard(metrics_data, [data_project], projects, data_branch)
         
@@ -886,7 +886,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects: An internal error occurred.")
+        st.error("Error fetching projects: An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -1299,7 +1299,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.")
+        st.info("Please select at least one metric to render the trend analysis.", icon="ℹ️")
         st.stop()
         
     if not df.empty:
