@@ -105,3 +105,8 @@
 **Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`).
 **Learning:** When refactoring applications into multiple entry points (e.g., monolithic to modular architectures), critical security validations and error handling mechanisms are easily lost or mismatched if not centrally managed or explicitly audited.
 **Prevention:** Ensure that all error-handling boundaries and authentication paths are consolidated into shared security modules whenever possible, and strictly audit any duplicated routing logic between architectural versions.
+
+## 2026-03-10 - Refactoring Security Regression (Duplicate Fix)
+**Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`), and the same vulnerability (`st.error(error_msg)`) was also found in the root `app.py`.
+**Learning:** When refactoring applications into multiple entry points (e.g., monolithic to modular architectures), critical security validations and error handling mechanisms are easily lost or mismatched if not centrally managed or explicitly audited. Both `app.py` versions must be checked for vulnerabilities.
+**Prevention:** Ensure that all error-handling boundaries and authentication paths are consolidated into shared security modules whenever possible, and strictly audit any duplicated routing logic between architectural versions.
