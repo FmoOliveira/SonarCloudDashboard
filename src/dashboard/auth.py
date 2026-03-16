@@ -13,7 +13,7 @@ def get_msal_client():
         client_secret = os.environ.get("AZURE_AD_CLIENT_SECRET") or st.secrets["azure_ad"]["client_secret"]
     except KeyError as e:
         logging.error(f"Missing Azure AD configuration in `.streamlit/secrets.toml`: {e}")
-        st.error("Missing Azure AD configuration in `.streamlit/secrets.toml`.", icon="🚨")
+        st.error("Security Configuration Error: Missing identity provider configuration.", icon="🚨")
         st.stop()
 
     authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -30,7 +30,8 @@ def get_auth_url(state=None):
     try:
         redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI") or st.secrets["azure_ad"]["redirect_uri"]
     except KeyError:
-        st.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.", icon="🚨")
+        logging.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.")
+        st.error("Security Configuration Error: Missing identity provider configuration.", icon="🚨")
         st.stop()
         
     # We request the basic profile scopes
@@ -52,7 +53,8 @@ def acquire_token_by_auth_code(auth_code: str):
     try:
         redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI") or st.secrets["azure_ad"]["redirect_uri"]
     except KeyError:
-        st.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.", icon="🚨")
+        logging.error("Missing `redirect_uri` in environment or `.streamlit/secrets.toml`.")
+        st.error("Security Configuration Error: Missing identity provider configuration.", icon="🚨")
         st.stop()
 
     scopes = ["User.Read"]
@@ -85,5 +87,5 @@ def logout(cookies=None):
                 del cookies[key]
         cookies.save()
             
-    st.info("You have been logged out.")
+    st.info("You have been logged out.", icon="👋")
     st.rerun()
