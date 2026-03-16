@@ -41,7 +41,7 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}")
+        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -97,7 +97,7 @@ def get_secret(domain: str, key: str) -> str:
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error(error_msg, icon="🚨")
+        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
         st.stop()
         return ""
 
@@ -529,7 +529,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -559,7 +559,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
         st.markdown("### Authentication Required")
-        st.info("You must log in with your corporate account to access this dashboard.")
+        st.info("You must log in with your corporate account to access this dashboard.", icon="🔐")
         
         state = cookies.get("auth_state")
         if not state:
@@ -604,7 +604,7 @@ def main():
             projects = fetch_projects(api, organization)
             
         if not projects:
-            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
             st.stop()
 
     # Sidebar for controls
@@ -644,7 +644,7 @@ def main():
         )
         
         if not selected_project:
-            st.warning("Please select a project.")
+            st.warning("Please select a project.", icon="⚠️")
             st.stop()
             
         if is_demo_mode:
@@ -781,7 +781,7 @@ def main():
                 stored_projects = storage.get_stored_projects()
                 st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).", icon="⚠️")
         except Exception as e:
             logging.error(f"Storage unavailable: {str(e)}")
             st.caption("Storage unavailable: An internal error occurred.")
@@ -854,7 +854,7 @@ def main():
         project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
         
         # Single consolidated info block
-        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**")
+        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
         
         display_dashboard(metrics_data, [data_project], projects, data_branch)
         
@@ -892,7 +892,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects: An internal error occurred.")
+        st.error("Error fetching projects: An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -902,7 +902,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
+        st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:
@@ -946,7 +946,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history_dict = {}
+        history_dict: dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -1238,7 +1238,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         selection_mode="single",
         key="preset_selector",
         default=st.session_state.active_preset,
-        on_change=sync_preset_to_multiselect
+        on_change=sync_preset_to_multiselect,
+        help="Quickly switch between pre-configured metric combinations for analysis."
     )
     
     col1, col2 = st.columns([2, 1])
@@ -1305,10 +1306,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.")
-        st.stop()
+        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
         
-    if not df.empty:
+    if not df.empty and confirmed_metrics:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
