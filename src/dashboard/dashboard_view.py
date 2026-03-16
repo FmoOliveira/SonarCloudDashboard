@@ -171,8 +171,12 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
     def sync_preset_to_multiselect():
         selected_preset = st.session_state.preset_selector
+        if not selected_preset:
+            selected_preset = "Custom (Manual Selection)"
+            st.session_state.preset_selector = selected_preset
+
         if selected_preset != "Custom (Manual Selection)":
-            st.session_state.active_metrics = METRIC_PRESETS[selected_preset]
+            st.session_state.active_metrics = METRIC_PRESETS.get(selected_preset, [])
         st.session_state.active_preset = selected_preset
 
     def sync_multiselect_to_preset():
