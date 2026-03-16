@@ -41,7 +41,7 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}")
+        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -97,7 +97,7 @@ def get_secret(domain: str, key: str) -> str:
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error(error_msg, icon="🚨")
+        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
         st.stop()
         return ""
 
@@ -529,7 +529,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -553,7 +553,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
         st.markdown("### Authentication Required")
-        st.info("You must log in with your corporate account to access this dashboard.")
+        st.info("You must log in with your corporate account to access this dashboard.", icon="🔐")
         
         state = cookies.get("auth_state")
         if not state:
@@ -638,7 +638,7 @@ def main():
         )
         
         if not selected_project:
-            st.warning("Please select a project.")
+            st.warning("Please select a project.", icon="⚠️")
             st.stop()
             
         if is_demo_mode:
@@ -775,7 +775,7 @@ def main():
                 stored_projects = storage.get_stored_projects()
                 st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).", icon="⚠️")
         except Exception as e:
             logging.error(f"Storage unavailable: {str(e)}")
             st.caption("Storage unavailable: An internal error occurred.")
@@ -886,7 +886,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects: An internal error occurred.")
+        st.error("Error fetching projects: An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -896,7 +896,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
+        st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:
@@ -940,7 +940,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history_dict = {}
+        history_dict: dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']

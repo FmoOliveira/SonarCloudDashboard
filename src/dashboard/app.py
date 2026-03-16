@@ -15,7 +15,6 @@ import os
 import secrets
 import gc
 import sys
-import logging
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
@@ -199,18 +198,10 @@ def main():
             branches = fetch_project_branches(api, selected_project)
             branch_options = [b.get('name', 'Unknown') for b in branches]
 
-        date_range = st.selectbox(
-            "Time Period",
-            options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."],
-            index=1,
-            help="Select the timeframe for historical metric analysis."
-        )
+        date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
 
-        # --- Dedicated Custom Date Range State ---
         custom_days = None
         if date_range == "Custom...":
-            from datetime import datetime, timedelta
-            # Inject a secondary input field when 'Custom' is selected
             date_vals = st.date_input(
                 "Select Date Range",
                 value=(datetime.now() - timedelta(days=30), datetime.now()),
@@ -219,8 +210,6 @@ def main():
                 format="YYYY/MM/DD",
                 help="Select the start and end dates."
             )
-
-            # Streamlit returns a tuple of (start_date, end_date) when multiple dates are selected
             if isinstance(date_vals, tuple) and len(date_vals) == 2:
                 start_date, end_date = date_vals
                 custom_days = (datetime.now().date() - start_date).days
@@ -228,10 +217,7 @@ def main():
             else:
                 custom_days = 30
 
-        if date_range == "Custom...":
-            days = custom_days
-        else:
-            days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
+        days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, custom_days if date_range == "Custom..." else 30)
 
         with st.form(key="controls_form", border=False):
             branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"

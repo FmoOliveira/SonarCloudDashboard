@@ -33,3 +33,7 @@
 - **Performance Opportunity Found:** An $O(N^2)$ time complexity bottleneck during API data fetching within `fetch_sonar_history_async`. Repeatedly searching a growing list for existing dates using `next((r for r in history if r['date'] == date_val), None)` blocked the main execution thread when processing thousands of records.
 - **The Fix:** Replaced the `history` list and `O(N)` lookups with a dictionary (`history_dict`). Keying records by `date_val` allows for `O(1)` access time (`history_dict.get(date_val)`), effectively dropping the overall iteration complexity from $O(M \times N^2)$ to $O(M \times N)$.
 - **Why it Matters:** Non-vectorized Python loops are already slow; nesting an $O(N)$ list search inside a double-loop (iterating over metrics, then historical data points) exacerbates latency. Eliminating list scanning via hash-map lookups provides an immense, noticeable speed boost for high-volume telemetry processing during Streamlit reruns.
+
+- **Anti-Pattern Found:** The `st.selectbox` UI component in `app.py` was iterating over the `projects` list for each rendered option in its `format_func` parameter, executing `next((p['name'] for p in projects if p['key'] == x), x)`. This evaluates in `O(M * N)` time.
+- **The Fix:** Created a `project_names` dictionary mapped to the list, enabling `O(1)` lookups via `project_names.get(x, x)` inside the `format_func`.
+- **Why it Matters:** Streamlit re-runs the script frequently. Inefficient list lookups in UI rendering logic block the main thread and degrade application responsiveness.
