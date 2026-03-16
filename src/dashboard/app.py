@@ -15,7 +15,6 @@ import os
 import secrets
 import gc
 import sys
-import secrets
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
@@ -118,8 +117,8 @@ def main():
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
-                    error_msg = f"Authentication failed: {error_desc}"
-                    st.error(error_msg, icon="🚨")
+                    logging.error(f"Authentication failed: {error_desc}")
+                    st.error("Authentication failed: An internal error occurred.")
                     st.stop()
 
     if auth_token:
@@ -198,9 +197,28 @@ def main():
             branches = fetch_project_branches(api, selected_project)
             branch_options = [b.get('name', 'Unknown') for b in branches]
 
+        date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
+
+        custom_days = None
+        if date_range == "Custom...":
+            date_vals = st.date_input(
+                "Select Date Range",
+                value=(datetime.now() - timedelta(days=30), datetime.now()),
+                max_value=datetime.now(),
+                label_visibility="collapsed",
+                format="YYYY/MM/DD",
+                help="Select the start and end dates."
+            )
+            if isinstance(date_vals, tuple) and len(date_vals) == 2:
+                start_date, end_date = date_vals
+                custom_days = (datetime.now().date() - start_date).days
+                custom_days = max(1, custom_days)
+            else:
+                custom_days = 30
+
+        days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, custom_days if date_range == "Custom..." else 30)
+
         with st.form(key="controls_form", border=False):
-            date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
-            days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
             branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"
             execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 

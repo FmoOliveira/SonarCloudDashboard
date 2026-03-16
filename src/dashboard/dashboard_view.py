@@ -299,7 +299,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 def create_box_plot(df, metric, project_names):
     """Create a box plot for the selected metric"""
     if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+        st.info("No data available for the selected metric. Please try adjusting your filters.", icon="ℹ️")
         return
     
     plot_data = df.copy()
