@@ -9,15 +9,12 @@ from dashboard_components import (
     inject_statistical_anomalies
 )
 
-def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
+    if metric_col not in earliest_vals.columns or project_count == 0:
         return ("0.0%" if is_percent else "0", None, "#888888")
     
-    # Assuming df is already sorted by date to save O(N log N) sorting per metric
-    grouped = df.groupby('project_key', sort=False, observed=True)[metric_col]
-    earliest_total = float(grouped.first().sum())
-    latest_total = float(grouped.last().sum())
-    project_count = grouped.ngroups
+    earliest_total = float(earliest_vals[metric_col].sum())
+    latest_total = float(latest_vals[metric_col].sum())
     
     is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
     
@@ -50,7 +47,10 @@ def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True
     return val_str, delta_str, color
 
 def get_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    return compute_metric_stats(df, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
+    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+        return ("0.0%" if is_percent else "0", None, "#888888")
+    grouped = df.groupby('project_key', sort=False, observed=True)
+    return compute_metric_stats(grouped.first(), grouped.last(), grouped.ngroups, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
 
 def render_login_page(auth_url: str):
     """Renders a visually prominent login screen in the main content area."""
@@ -105,28 +105,41 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     else:
         df_sorted = df
 
+    # ⚡ Bolt Optimization: Group the dataframe once globally to extract earliest and latest values
+    # for all metrics simultaneously. This prevents computing 5 separate O(N) groupby operations
+    # sequentially on the main thread, cutting the overhead by 80%.
+    if not df_sorted.empty and 'project_key' in df_sorted.columns:
+        grouped = df_sorted.groupby('project_key', sort=False, observed=True)
+        earliest_vals = grouped.first()
+        latest_vals = grouped.last()
+        project_count = grouped.ngroups
+    else:
+        earliest_vals = pd.DataFrame()
+        latest_vals = pd.DataFrame()
+        project_count = 0
+
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        val, delta, color = compute_metric_stats(df_sorted, 'vulnerabilities')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = compute_metric_stats(df_sorted, 'security_hotspots')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = compute_metric_stats(df_sorted, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = compute_metric_stats(df_sorted, 'security_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = compute_metric_stats(df_sorted, 'reliability_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
