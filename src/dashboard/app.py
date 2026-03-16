@@ -126,7 +126,13 @@ def main():
         initials = "".join([n[0] for n in user_name.split() if n])[:2].upper() or "U"
         safe_user_name = html.escape(user_name)
         safe_initials = html.escape(initials)
-        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+
+        # Strict URL scheme validation for images to prevent Javascript execution via XSS
+        raw_photo_b64 = cookies.get("user_photo") or ""
+        if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
+            raw_photo_b64 = ""
+
+        safe_photo_b64 = html.escape(raw_photo_b64)
         safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:

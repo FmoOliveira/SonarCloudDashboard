@@ -542,7 +542,13 @@ def main():
         # Escape user input to prevent XSS
         safe_user_name = html.escape(user_name)
         safe_initials = html.escape(initials)
-        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+
+        # Strict URL scheme validation for images to prevent Javascript execution via XSS
+        raw_photo_b64 = cookies.get("user_photo") or ""
+        if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
+            raw_photo_b64 = ""
+
+        safe_photo_b64 = html.escape(raw_photo_b64)
         safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
 
         # Render the Dashboard Title with a floating right profile component
