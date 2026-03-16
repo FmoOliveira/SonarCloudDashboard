@@ -4,7 +4,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import List, Dict, Optional
 import streamlit as st
-import logging
 
 class SonarCloudAPI:
     """SonarCloud API client for fetching organization and project metrics"""
@@ -72,7 +71,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch projects: {str(e)}")
-            st.error("Failed to fetch projects.")
+            st.error("Failed to fetch projects. An internal error occurred.")
             return []
     
     def get_project_measures(self, project_key: str, branch: str = None) -> Optional[Dict]:
@@ -259,7 +258,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch organization metrics: {str(e)}")
-            st.error("Failed to fetch organization metrics.")
+            st.error("Failed to fetch organization metrics. An internal error occurred.")
             return {}
     
     def get_project_branches(self, project_key: str) -> List[Dict]:

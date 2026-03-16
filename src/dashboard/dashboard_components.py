@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import io
 import html
+import typing
 
 # Modern dashboard palette
 CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -65,7 +66,7 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+def create_metric_card(title: str, value: str, icon_class: str, delta: str | None = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
@@ -104,7 +105,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     Dynamically scales height based on the number of metrics.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     num_metrics = len(metrics)
@@ -133,7 +134,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     if 'date' in plot_data.columns:
         plot_data = plot_data.sort_values('date')
     else:
-        st.warning("No date information available for trend analysis.")
+        st.info("No date information available for trend analysis. Please try adjusting your filters.", icon="ℹ️")
         return
 
     from datetime import timedelta
@@ -154,13 +155,19 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 
     projects = plot_data['project_name'].unique()
     
+    # ⚡ Bolt Optimization: Pre-group dataframe by project outside the nested loop.
+    # Replaces O(N) boolean indexing (plot_data[plot_data['project_name'] == project])
+    # inside an O(M * P) loop with an O(N) grouping and O(1) dictionary lookups.
+    # This prevents main-thread blocking during heavy Plotly rendering.
+    project_data_dict = {project: group for project, group in plot_data.groupby('project_name', observed=True)}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             row_idx = i + 1 
             
             # Add a trace for each project
             for j, project in enumerate(projects):
-                project_data = plot_data[plot_data['project_name'] == project]
+                project_data = project_data_dict.get(project, pd.DataFrame())
                 
                 is_single_project = len(projects) == 1
                 
@@ -215,7 +222,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        axis_dict = dict(
+        axis_dict: dict[str, typing.Any] = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
@@ -242,7 +249,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     """Create a bar chart comparing projects"""
     if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+        st.info("No data available for the selected metric. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
@@ -277,7 +284,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     Renders an overlaid area chart optimized for dark mode visibility.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     fig = go.Figure()
@@ -405,7 +412,7 @@ def create_coverage_donut(coverage_value: float):
 def create_quality_gate_status(projects_data: pd.DataFrame):
     """Create a summary of quality gate status across projects"""
     if projects_data.empty:
-        st.warning("No project data available.")
+        st.info("No project data available. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Mock quality gate status based on metrics
@@ -477,7 +484,7 @@ def format_metric_value(metric: str, value):
 def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     """Create a heatmap of metrics across projects"""
     if df.empty:
-        st.warning("No data available for heatmap.")
+        st.info("No data available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
@@ -489,7 +496,7 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     available_metrics = [m for m in numeric_metrics if m in latest_data.columns]
     
     if not available_metrics:
-        st.warning("No numeric metrics available for heatmap.")
+        st.info("No numeric metrics available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Prepare data for heatmap

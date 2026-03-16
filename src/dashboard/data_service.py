@@ -21,7 +21,8 @@ def get_secret(domain: str, key: str) -> str:
     try:
         return st.secrets[domain][key]
     except FileNotFoundError:
-        st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
+        logging.error("Security Configuration Error: `secrets.toml` is missing.")
+        st.error("Security Configuration Error: A required configuration file is missing.", icon="🚨")
         st.stop()
         return ""
     except KeyError:
