@@ -9,13 +9,13 @@ if hasattr(st, 'cache'):
         return st.cache_data(*args, **kwargs)
     st.cache = _safe_cache
 
+import logging
 import pandas as pd
 import html
 import os
 import secrets
 import gc
 import sys
-import logging
 from datetime import datetime, timedelta
 from streamlit_cookies_manager import CookieManager
 
