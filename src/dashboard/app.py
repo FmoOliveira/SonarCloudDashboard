@@ -93,18 +93,15 @@ def main():
         expected_state = cookies.get("auth_state")
         if "auth_state" in cookies:
             del cookies["auth_state"]
-            cookies.save()
 
         if not expected_state or returned_state != expected_state:
+            cookies.save()
             st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
             st.stop()
 
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
 
-            # Clean up state cookie after successful validation
-            del cookies["auth_state"]
-            cookies.save()
             if "access_token" in token_result:
                 auth_token = token_result["access_token"]
                 cookies["auth_token"] = auth_token
@@ -115,6 +112,7 @@ def main():
                     cookies["user_photo"] = photo_b64
                 cookies.save()
             else:
+                cookies.save()
                 error_desc = token_result.get("error_description", "Unknown error")
                 if "AADSTS54005" in error_desc:
                     st.rerun()
