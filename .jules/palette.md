@@ -33,3 +33,6 @@ Critical UX learnings and observations only.
 *   **Observation**: An empty dataframe or chart looks like a bug.
 *   **Fix**: Always check for `if df.empty:` and render a helpful `st.info` or `st.warning` message explaining why no data is shown (e.g., "No data found for the selected time range.").
 *   **Streamlit Form State-Loss Bug**: Input widgets (like `st.selectbox` and conditional `st.date_input`) must not be placed inside an `st.form` if selecting them needs to trigger a conditional UI re-render (like showing an extra date field for a "Custom range" option). The script rerun cycle will ignore these inputs until the whole form is submitted, destroying the intended interactive UX. Keep conditional trigger inputs OUTSIDE the form.
+
+### Avoid `st.stop()` for Empty States
+* When a multiselect or filter returns an empty state, avoid using `st.stop()` to halt the script (e.g. `if not selection: st.stop()`). This abruptly halts the entire page execution and hides all subsequent components (like data tables). Instead, use conditional blocks (`if selection: render_charts()`) combined with native info components (`st.info("No selection", icon="ℹ️")`) to preserve the remaining page layout gracefully.
