@@ -118,7 +118,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     if auth_token:
