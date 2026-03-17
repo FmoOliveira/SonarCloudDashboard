@@ -49,7 +49,8 @@ def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, 
 def get_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
     if df.empty or metric_col not in df.columns or 'date' not in df.columns:
         return ("0.0%" if is_percent else "0", None, "#888888")
-    grouped = df.groupby('project_key', sort=False, observed=True)
+    df_sorted = df.sort_values('date')
+    grouped = df_sorted.groupby('project_key', sort=False, observed=True)
     return compute_metric_stats(grouped.first(), grouped.last(), grouped.ngroups, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
 
 def render_login_page(auth_url: str):
@@ -202,13 +203,17 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
+        # This prevents repeatedly executing .replace() and .title() on every render loop
+        metric_display_names = {m: m.replace('_', ' ').title() for m in available_metrics}
+
         st.multiselect(
             "Or customize up to 3 individual metrics:",
             available_metrics,
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: m.replace('_', ' ').title(),
+            format_func=lambda m: metric_display_names.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
