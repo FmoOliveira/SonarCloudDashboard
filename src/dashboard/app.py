@@ -118,8 +118,8 @@ def main():
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
-                    error_msg = f"Authentication failed: {error_desc}"
-                    st.error(error_msg)
+                    logging.error(f"Authentication failed: {error_desc}")
+                    st.error("Authentication failed: An internal error occurred.")
                     st.stop()
 
     if auth_token:
