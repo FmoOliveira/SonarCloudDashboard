@@ -1238,6 +1238,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) format_func
+        # lookup in the Streamlit render loop. The old string replacement was evaluated
+        # on every item on every render cycle.
+        metric_names_dict = {m: m.replace('_', ' ').title() for m in available_metrics}
         
         st.multiselect(
             "Or customize up to 3 individual metrics:",
@@ -1245,7 +1249,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: m.replace('_', ' ').title(),
+            format_func=lambda m: metric_names_dict.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
