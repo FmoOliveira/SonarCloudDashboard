@@ -110,3 +110,12 @@
 **Vulnerability:** The summary of available projects injected `p['name']` and `p['key']` directly into markdown strings without escaping when formatting the project list.
 **Learning:** Even administrative or summary data fetched from third-party APIs (like SonarCloud project names) must be treated as untrusted and sanitized before rendering in Streamlit, even if not explicitly using `unsafe_allow_html=True`.
 **Prevention:** Use `html.escape()` when interpolating any external or API-provided data into text intended for UI rendering.
+## 2026-03-11 - Streamlit XSS via Image URL Scheme
+**Vulnerability:** The application retrieved user profile images (`user_photo`) from an authentication cookie and rendered them via `st.markdown(..., unsafe_allow_html=True)`. While `html.escape()` prevented attribute breakouts, it failed to validate the URL scheme. An attacker could inject a malicious scheme (like `javascript:`) leading to a potential Cross-Site Scripting (XSS) vulnerability.
+**Learning:** `html.escape()` is insufficient for sanitizing URLs or resource attributes (`src`, `href`) because it does not validate the protocol. Untrusted data must undergo strict scheme validation before injection into HTML.
+**Prevention:** Always implement strict URL scheme validation (e.g., verifying the string starts with `data:image/` or `https://`) in addition to HTML escaping before rendering untrusted URLs in `unsafe_allow_html=True` blocks.
+
+## 2026-03-10 - Refactoring Security Regression (Duplicate Fix)
+**Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`), and the same vulnerability (`st.error(error_msg)`) was also found in the root `app.py`.
+**Learning:** When refactoring applications into multiple entry points (e.g., monolithic to modular architectures), critical security validations and error handling mechanisms are easily lost or mismatched if not centrally managed or explicitly audited. Both `app.py` versions must be checked for vulnerabilities.
+**Prevention:** Ensure that all error-handling boundaries and authentication paths are consolidated into shared security modules whenever possible, and strictly audit any duplicated routing logic between architectural versions.
