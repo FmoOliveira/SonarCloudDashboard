@@ -71,7 +71,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch projects: {str(e)}")
-            st.error("Failed to fetch projects. An internal error occurred.")
+            st.error("Failed to fetch projects. An internal error occurred.", icon="🚨")
             return []
     
     def get_project_measures(self, project_key: str, branch: str = None) -> Optional[Dict]:
@@ -258,7 +258,7 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch organization metrics: {str(e)}")
-            st.error("Failed to fetch organization metrics. An internal error occurred.")
+            st.error("Failed to fetch organization metrics. An internal error occurred.", icon="🚨")
             return {}
     
     def get_project_branches(self, project_key: str) -> List[Dict]:

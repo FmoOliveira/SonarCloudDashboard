@@ -32,7 +32,7 @@ def get_storage_client() -> StorageInterface | None:
             # Future expansion
             # from database.postgres_storage import PostgresStorage
             # return PostgresStorage(...)
-            st.error("PostgreSQL provider is not yet implemented.")
+            st.error("PostgreSQL provider is not yet implemented.", icon="🚨")
             st.stop()
             
         else:
