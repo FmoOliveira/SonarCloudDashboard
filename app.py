@@ -1093,18 +1093,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
     
     return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
 
-def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
+    if metric_col not in earliest_vals.columns or project_count == 0:
         return ("0.0%" if is_percent else "0", None, "#888888")
     
-    df_sorted = df.sort_values('date')
-    
-    # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
-    # by eliminating the Python-level iteration and using underlying C extensions
-    grouped = df_sorted.groupby('project_key', sort=False, observed=True)[metric_col]
-    earliest_total = float(grouped.first().sum())
-    latest_total = float(grouped.last().sum())
-    project_count = grouped.ngroups
+    earliest_total = float(earliest_vals[metric_col].sum())
+    latest_total = float(latest_vals[metric_col].sum())
     
     is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
     
@@ -1138,7 +1132,11 @@ def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True
     return val_str, delta_str, color
 
 def get_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    return compute_metric_stats(df, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
+    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+        return ("0.0%" if is_percent else "0", None, "#888888")
+    df_sorted = df.sort_values('date')
+    grouped = df_sorted.groupby('project_key', sort=False, observed=True)
+    return compute_metric_stats(grouped.first(), grouped.last(), grouped.ngroups, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
 
 def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
@@ -1147,36 +1145,50 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     project_names = {p['key']: p['name'] for p in all_projects}
     df['project_name'] = df['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Sort dataframe by date once globally instead of multiple times
+    # sorting in compute_metric_stats to prevent O(M*N log N) sorting bottleneck.
+    if not df.empty and 'date' in df.columns:
+        df_sorted = df.sort_values('date')
+    else:
+        df_sorted = df
+
+    # ⚡ Bolt Optimization: Group the dataframe once globally to extract earliest and latest values
+    # for all metrics simultaneously. This prevents computing 5 separate O(N) groupby operations
+    # sequentially on the main thread, cutting the overhead by 80%.
+    if not df_sorted.empty and 'project_key' in df_sorted.columns:
+        grouped = df_sorted.groupby('project_key', sort=False, observed=True)
+        earliest_vals = grouped.first()
+        latest_vals = grouped.last()
+        project_count = grouped.ngroups
+    else:
+        earliest_vals = pd.DataFrame()
+        latest_vals = pd.DataFrame()
+        project_count = 0
+
     # Overview metrics
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
     
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    # ⚡ Bolt Optimization: Vectorized Aggregation
-    # Instead of iterating through every project (O(N*M)) inside helper function,
-    # we sort once and group by project to get first/last values in O(N).
-    # This reduces complexity from O(M * N * log N) to O(N log N).
-
-
     with col1:
-        val, delta, color = compute_metric_stats(df, 'vulnerabilities')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = compute_metric_stats(df, 'security_hotspots')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = compute_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = compute_metric_stats(df, 'security_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = compute_metric_stats(df, 'reliability_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
@@ -1250,13 +1262,17 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
     with col1:
         
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
+        # This prevents repeatedly executing .replace() and .title() on every render loop
+        metric_display_names = {m: m.replace('_', ' ').title() for m in available_metrics}
+
         st.multiselect(
             "Or customize up to 3 individual metrics:",
             available_metrics,
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: m.replace('_', ' ').title(),
+            format_func=lambda m: metric_display_names.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
