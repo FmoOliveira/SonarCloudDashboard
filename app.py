@@ -880,7 +880,7 @@ def main():
         # Show summary of available options
         if projects:
             st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Available Projects</h3>', unsafe_allow_html=True)
-            project_list = [f"- **{p['name']}** (`{p['key']}`)" for p in projects[:10]]
+            project_list = [f"- **{html.escape(p['name'])}** (`{html.escape(p['key'])}`)" for p in projects[:10]]
             if len(projects) > 10:
                 project_list.append(f"- ... and **{len(projects) - 10}** more projects")
             st.markdown("\n".join(project_list) + "\n")
