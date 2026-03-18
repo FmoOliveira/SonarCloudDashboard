@@ -444,7 +444,9 @@ def create_quality_gate_status(projects_data: pd.DataFrame):
     quality_gates = df[['project', 'status', 'color']].to_dict('records')
     
     # Create status summary
-    status_counts = pd.DataFrame(quality_gates)['status'].value_counts()
+    # ⚡ Bolt Optimization: Replace O(N) dict conversion + DataFrame recreation
+    # with a direct O(1) vectorized operation on the existing series.
+    status_counts = df['status'].value_counts()
     
     fig = px.pie(
         values=status_counts.values,
