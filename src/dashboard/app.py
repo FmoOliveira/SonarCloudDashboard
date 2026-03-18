@@ -93,9 +93,9 @@ def main():
         expected_state = cookies.get("auth_state")
         if "auth_state" in cookies:
             del cookies["auth_state"]
+            cookies.save()
 
         if not expected_state or returned_state != expected_state:
-            cookies.save()
             st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
             st.stop()
 
