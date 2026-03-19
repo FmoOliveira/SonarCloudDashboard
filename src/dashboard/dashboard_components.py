@@ -118,13 +118,17 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     # Calculate total figure height
     total_height = (num_metrics * BASE_ROW_HEIGHT) + CHART_CHROME_PADDING
 
+    # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
+    # to avoid O(N) string manipulations in the Plotly rendering loop.
+    metric_display_names = {m: m.replace('_', ' ').title() for m in metrics}
+
     from plotly.subplots import make_subplots
     fig = make_subplots(
         rows=num_metrics, 
         cols=1, 
         shared_xaxes=True,
         vertical_spacing=0.08, # Provide breathing room between the X-axis and the next title
-        subplot_titles=[m.replace('_', ' ').title() for m in metrics]
+        subplot_titles=[metric_display_names.get(m, m) for m in metrics]
     )
     
     # Prepare data for plotting
@@ -175,7 +179,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
                 # If multiple projects, color by project and show project in legend (only on first subplot).
                 if is_single_project:
                     trace_color = CHART_COLORS[i % len(CHART_COLORS)]
-                    trace_name = metric.replace('_', ' ').title()
+                    trace_name = metric_display_names.get(metric, metric)
                     trace_legendgroup = metric
                     show_legend_for_trace = True # Show legend for each metric
                 else:
@@ -256,19 +260,22 @@ def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     latest_data = df.groupby('project_key', observed=True)[metric].last().reset_index()
     latest_data['project_name'] = latest_data['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Pre-calculate the formatted title to avoid repeating string manipulations.
+    formatted_metric_name = metric.replace('_', ' ').title()
+
     # Create bar chart
     fig = px.bar(
         latest_data,
         x='project_name',
         y=metric,
-        title=f"{metric.replace('_', ' ').title()} by Project",
+        title=f"{formatted_metric_name} by Project",
         color='project_name', # Color by project name to use custom palette
         color_discrete_sequence=CHART_COLORS
     )
     
     fig.update_layout(
         xaxis_title="",
-        yaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title=formatted_metric_name,
         xaxis_tickangle=-45,
         showlegend=False
     )
@@ -309,6 +316,10 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     except Exception:
         pass # fallback to default order
 
+    # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
+    # to avoid O(N) string manipulations in the Plotly rendering loop.
+    metric_display_names = {m: m.replace('_', ' ').title() for m in metrics}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             line_color, fill_color = color_palette[i % len(color_palette)]
@@ -318,7 +329,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
                     x=plot_data[date_col],
                     y=plot_data[metric],
                     mode='lines',
-                    name=metric.replace('_', ' ').title(),
+                    name=metric_display_names.get(metric, metric),
                     # spline smoothing maintains the modern aesthetic
                     line=dict(width=2, color=line_color, shape='spline', smoothing=0.8), 
                     fill='tozeroy',          # Fills the area down to the X-axis (Y=0)
@@ -441,7 +452,7 @@ def create_quality_gate_status(projects_data: pd.DataFrame):
         df['project_key'] = 'Unknown'
 
     df['project'] = df['project_key'].fillna('Unknown')
-    quality_gates = df[['project', 'status', 'color']].to_dict('records')
+    _ = df[['project', 'status', 'color']].to_dict('records')
     
     # Create status summary
     # ⚡ Bolt Optimization: Replace O(N) dict conversion + DataFrame recreation

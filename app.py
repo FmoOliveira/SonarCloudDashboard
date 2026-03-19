@@ -485,8 +485,14 @@ def main():
     # Read auth state from persistent cookies directly
     auth_token = cookies.get("auth_token")
     
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
+    if is_demo_mode:
+        auth_token = "demo_token"
+        cookies["user_info_name"] = "Demo User"
+        cookies.save()
+
     # Process login if returning from Entra ID
-    if not auth_token and "code" in st.query_params:
+    if not auth_token and "code" in st.query_params and not is_demo_mode:
         auth_code = st.query_params["code"]
         returned_state = st.query_params.get("state")
         st.query_params.clear()
@@ -582,7 +588,7 @@ def main():
     # User is Authenticated, logout moved to upper right dropdown
     
     # --- DEMO MODE INTERCEPT ---
-    is_demo_mode = "--demo-mode" in sys.argv
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
     
     if is_demo_mode:
         st.sidebar.warning("🛠️ Running in Offline Demo Mode. Data is synthetic.")
@@ -1489,17 +1495,20 @@ def create_box_plot(df, metric, project_names):
     plot_data = df.copy()
     plot_data['project_name'] = plot_data['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Pre-calculate formatted metric name to avoid repeating string manipulations.
+    formatted_metric_name = metric.replace('_', ' ').title()
+
     # Create box plot
     fig = px.box(
         plot_data,
         x='project_name',
         y=metric,
-        title=f"{metric.replace('_', ' ').title()} Distribution by Project"
+        title=f"{formatted_metric_name} Distribution by Project"
     )
     
     fig.update_layout(
         xaxis_title="Project",
-        yaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title=formatted_metric_name,
         xaxis_tickangle=-45
     )
     
