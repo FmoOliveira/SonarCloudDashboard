@@ -328,16 +328,19 @@ def create_box_plot(df, metric, project_names):
     plot_data = df.copy()
     plot_data['project_name'] = plot_data['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Pre-calculate formatted metric name to avoid repeating string manipulations.
+    formatted_metric_name = metric.replace('_', ' ').title()
+
     fig = px.box(
         plot_data,
         x='project_name',
         y=metric,
-        title=f"{metric.replace('_', ' ').title()} Distribution by Project"
+        title=f"{formatted_metric_name} Distribution by Project"
     )
     
     fig.update_layout(
         xaxis_title="Project",
-        yaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title=formatted_metric_name,
         xaxis_tickangle=-45
     )
     
