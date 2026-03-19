@@ -226,7 +226,10 @@ def main():
         days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, custom_days if date_range == "Custom..." else 30)
 
         with st.form(key="controls_form", border=False):
-            branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"
+            if branch_options:
+                branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.")
+            else:
+                branch_filter = st.text_input("Branch", value="master", help="No branches found. Enter branch name manually.", placeholder="e.g., main, master, feature/xyz")
             execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 
         if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
@@ -244,6 +247,7 @@ def main():
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
             status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
+            st.toast("Data successfully loaded!", icon="✅")
 
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
