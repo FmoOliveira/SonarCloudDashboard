@@ -207,6 +207,7 @@ def main():
         date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
 
         custom_days = None
+        is_invalid_date_range = False
         if date_range == "Custom...":
             date_vals = st.date_input(
                 "Select Date Range",
@@ -220,6 +221,10 @@ def main():
                 start_date, end_date = date_vals
                 custom_days = (datetime.now().date() - start_date).days
                 custom_days = max(1, custom_days)
+            elif isinstance(date_vals, tuple) and len(date_vals) == 1:
+                st.info("Please select an end date to complete the range.", icon="📅")
+                is_invalid_date_range = True
+                custom_days = 30
             else:
                 custom_days = 30
 
@@ -230,7 +235,7 @@ def main():
                 branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.")
             else:
                 branch_filter = st.text_input("Branch", value="master", help="No branches found. Enter branch name manually.", placeholder="e.g., main, master, feature/xyz")
-            execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
+            execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:", disabled=is_invalid_date_range)
 
         if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
             st.cache_data.clear()
