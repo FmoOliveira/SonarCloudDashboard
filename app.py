@@ -671,6 +671,7 @@ def main():
 
         # --- Dedicated Custom Date Range State ---
         custom_days = None
+        is_date_incomplete = False
         if date_range == "Custom range...":
             # Inject a secondary input field when 'Custom' is selected
             date_vals = st.date_input(
@@ -687,6 +688,10 @@ def main():
                 start_date, end_date = date_vals
                 custom_days = (datetime.now().date() - start_date).days
                 custom_days = max(1, custom_days)
+            elif isinstance(date_vals, tuple) and len(date_vals) == 1:
+                st.info("Please select an end date to complete the range.", icon="📅")
+                is_date_incomplete = True
+                custom_days = 30
             else:
                 custom_days = 30
 
@@ -715,7 +720,8 @@ def main():
                 "Load Dashboard", 
                 type="primary", 
                 use_container_width=True,
-                icon=":material/analytics:"
+                icon=":material/analytics:",
+                disabled=is_date_incomplete
             )
 
         # 4. Visually separate secondary administrative actions
