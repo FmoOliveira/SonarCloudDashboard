@@ -1380,20 +1380,26 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         display_data = display_data.sort_values(['date', 'project_name', 'branch'])
         
         # Format numeric columns
-        for col in display_data.columns:
-            if col not in ['project_name', 'date', 'project_key', 'branch']:
-                try:
-                    if 'rating' in col:
-                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
-                    elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
-                    else:
-                        # Handle integer columns
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(int)
-                except Exception:
-                    # If conversion fails, keep as string
-                    display_data[col] = display_data[col].astype(str)
+        # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
+        # vectorized DataFrame-level operations. Applying to_numeric and fillna across
+        # column groups simultaneously prevents slow Python-level loops during Streamlit renders.
+        target_cols = [col for col in display_data.columns if col not in ['project_name', 'date', 'project_key', 'branch']]
+
+        if target_cols:
+            rating_cols = [c for c in target_cols if 'rating' in c]
+            float_cols = [c for c in target_cols if 'coverage' in c or 'density' in c or 'security_hotspots_reviewed' in c]
+            int_cols = [c for c in target_cols if c not in rating_cols and c not in float_cols]
+
+            try:
+                if rating_cols:
+                    display_data[rating_cols] = display_data[rating_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+                if float_cols:
+                    display_data[float_cols] = display_data[float_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).round(2)
+                if int_cols:
+                    display_data[int_cols] = display_data[int_cols].apply(pd.to_numeric, errors='coerce').fillna(0).astype(int)
+            except Exception:
+                for c in target_cols:
+                    display_data[c] = display_data[c].astype(str)
         
         # Define visual configuration for dataframe columns
         column_config = {

@@ -49,3 +49,11 @@
 - **Anti-Pattern Found:** The `st.multiselect` component in `dashboard_view.py` and `app.py` repeatedly executed `.replace('_', ' ').title()` on every item for its `format_func`. This caused unnecessary string manipulations during every Streamlit render loop.
 - **The Fix:** Pre-computed a dictionary (`metric_display_names`) mapping metric keys to their formatted string equivalents, replacing repeated string methods with an O(1) dictionary lookup `.get(m, m)` inside `format_func`.
 - **Why it Matters:** Repeatedly performing string manipulation inside widget callbacks blocks the main thread during Streamlit's frequent render cycles. Pre-computing mappings shifts overhead out of the render loop, resulting in a more responsive UI.
+
+- **Anti-Pattern Found:** The application was instantiating a new `msal.ConfidentialClientApplication` on every render loop when the user was unauthenticated, leading to repeated, blocking synchronous HTTP calls to Azure AD's OpenID configuration endpoint.
+- **The Fix:** Decorated the MSAL client initialization function with `@st.cache_resource` to create a globally cached, thread-safe singleton.
+- **Why it Matters:** Missing `@st.cache_resource` on identity provider connections forces Streamlit to re-fetch configuration metadata over the network continuously, degrading latency by hundreds of milliseconds. Caching it allows MSAL to maintain its internal state and OpenID metadata across the entire application lifecycle without stalling the render thread.
+
+- **Anti-Pattern Found:** The application was iterating over dataframe columns sequentially via a Python `for` loop in `display_dashboard` to apply `pd.to_numeric` and `fillna` logic to individual Pandas Series (e.g., in the Detailed Metrics table).
+- **The Fix:** Vectorized this data formatting pipeline by grouping columns by data type (`rating_cols`, `float_cols`, `int_cols`) and applying transformations simultaneously via `df[cols].apply(pd.to_numeric)`.
+- **Why it Matters:** Eliminating $O(C \times N)$ column-by-column iteration within the Streamlit render loop avoids expensive Python-level function dispatch overhead, maintaining a rapid, unblocked execution cycle.
