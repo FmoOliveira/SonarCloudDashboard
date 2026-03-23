@@ -43,3 +43,7 @@ Critical UX learnings and observations only.
 ### st.pills Deselection Bug
 *   **Observation**: Streamlit `st.pills` with `selection_mode="single"` allows the user to deselect the active option, resulting in the session state value becoming `None`. When using this state to look up dictionary keys (like preset configurations), it triggers a `KeyError` and crashes the application.
 *   **Fix**: To resolve this state-loss bug during reruns, always add a fallback check (e.g., `if not selected_preset: selected_preset = "Default"`) in the `on_change` callback before accessing dictionaries, and optionally reset the state variable to the fallback so the UI visually resets.
+
+### st.date_input Partial Range Selection
+*   **Observation**: When a user selects a single date in a Streamlit `st.date_input` configured for a range, Streamlit temporarily reruns and returns a tuple of length 1. This can cause partial state confusion or invalid API calls if a form is submitted before the range is completed.
+*   **Fix**: To prevent invalid state processing, explicitly check `isinstance(date_vals, tuple) and len(date_vals) == 1`, render an instructional `st.info` message to guide the user, and conditionally set `disabled=True` on dependent action buttons (like form submissions) until the range is valid.
