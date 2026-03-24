@@ -1,5 +1,6 @@
 import streamlit as st
 import logging
+import html
 from database.base import StorageInterface
 
 def get_storage_client() -> StorageInterface | None:
@@ -36,7 +37,8 @@ def get_storage_client() -> StorageInterface | None:
             st.stop()
             
         else:
-            st.error(f"Unsupported database provider: '{provider}'", icon="🚨")
+            safe_provider = html.escape(str(provider))
+            st.error(f"Unsupported database provider: '{safe_provider}'", icon="🚨")
             st.stop()
             
     except FileNotFoundError:
