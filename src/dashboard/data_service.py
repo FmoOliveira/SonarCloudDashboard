@@ -130,7 +130,10 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
     """Fetch historical metrics data using async endpoints and compress to Parquet bytes for caching"""
-    all_data = []
+    # ⚡ Bolt Optimization: Use a list of DataFrames to concat directly instead of
+    # converting back and forth to native Python dictionaries (e.g. `to_dict('records')`).
+    # This avoids an O(N) memory allocation and execution bottleneck during Streamlit reruns.
+    dfs_to_concat = []
     projects_to_fetch = []
     
     for project_key in project_keys:
@@ -142,12 +145,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 
                 if coverage_info["has_coverage"]:
                     stored_data = coverage_info.get("data", [])
-                    if stored_data:
+                    if stored_data is not None and (isinstance(stored_data, pd.DataFrame) and not stored_data.empty or (isinstance(stored_data, list) and stored_data)):
                         logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
                         if isinstance(stored_data, pd.DataFrame):
-                            all_data.extend(stored_data.to_dict('records'))
+                            dfs_to_concat.append(stored_data)
                         else:
-                            all_data.extend(stored_data)
+                            dfs_to_concat.append(pd.DataFrame(stored_data))
                         need_fresh_data = False
                 else:
                     logging.info(f"Fetching fresh data for {project_key}...")
@@ -167,11 +170,10 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 logging.error(f"Failed to fetch {project_key}: {str(result)}")
             else:
                 if result:
-                    for r in result:
-                        all_data.append(r)
+                    df_to_store = pd.DataFrame(result)
+                    dfs_to_concat.append(df_to_store)
                     if _storage:
                         try:
-                            df_to_store = pd.DataFrame(result)
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
                                 logging.info(f"Stored {len(result)} new records for {project_key}")
@@ -183,14 +185,14 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                         if measures:
                             measures['project_key'] = project_key
                             measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')
-                            all_data.append(measures)
+                            df_to_store = pd.DataFrame([measures])
+                            dfs_to_concat.append(df_to_store)
                             if _storage:
-                                df_to_store = pd.DataFrame([measures])
                                 _storage.store_metrics_data(df_to_store, project_key, branch)
                     except Exception as e:
                         logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
     
-    df = pd.DataFrame(all_data)
+    df = pd.concat(dfs_to_concat, ignore_index=True) if dfs_to_concat else pd.DataFrame()
     
     if not df.empty and 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
@@ -228,4 +230,4 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], downcast='float')
     
-    return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
+    return compress_to_parquet(df) if dfs_to_concat else compress_to_parquet(pd.DataFrame())

@@ -992,7 +992,10 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
     """Fetch historical metrics data using async endpoints and compress to Parquet bytes for caching"""
-    all_data = []
+    # ⚡ Bolt Optimization: Use a list of DataFrames to concat directly instead of
+    # converting back and forth to native Python dictionaries (e.g. `to_dict('records')`).
+    # This avoids an O(N) memory allocation and execution bottleneck during Streamlit reruns.
+    dfs_to_concat = []
     projects_to_fetch = []
     
     for project_key in project_keys:
@@ -1004,13 +1007,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 
                 if coverage_info["has_coverage"]:
                     stored_data = coverage_info.get("data", [])
-                    if stored_data:
+                    if stored_data is not None and (isinstance(stored_data, pd.DataFrame) and not stored_data.empty or (isinstance(stored_data, list) and stored_data)):
                         logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
-                        # Data returned from storage may already be a list of dicts or a dataframe
                         if isinstance(stored_data, pd.DataFrame):
-                            all_data.extend(stored_data.to_dict('records'))
+                            dfs_to_concat.append(stored_data)
                         else:
-                            all_data.extend(stored_data)
+                            dfs_to_concat.append(pd.DataFrame(stored_data))
                         need_fresh_data = False
                 else:
                     logging.info(f"Fetching fresh data for {project_key}...")
@@ -1030,11 +1032,10 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 logging.error(f"Failed to fetch {project_key}: {str(result)}")
             else:
                 if result:
-                    for r in result:
-                        all_data.append(r)
+                    df_to_store = pd.DataFrame(result)
+                    dfs_to_concat.append(df_to_store)
                     if _storage:
                         try:
-                            df_to_store = pd.DataFrame(result)
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
                                 logging.info(f"Stored {len(result)} new records for {project_key}")
@@ -1047,14 +1048,14 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                         if measures:
                             measures['project_key'] = project_key
                             measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')
-                            all_data.append(measures)
+                            df_to_store = pd.DataFrame([measures])
+                            dfs_to_concat.append(df_to_store)
                             if _storage:
-                                df_to_store = pd.DataFrame([measures])
                                 _storage.store_metrics_data(df_to_store, project_key, branch)
                     except Exception as e:
                         logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
     
-    df = pd.DataFrame(all_data)
+    df = pd.concat(dfs_to_concat, ignore_index=True) if dfs_to_concat else pd.DataFrame()
     
     # If we have data, aggregate multiple records per day
     if not df.empty and 'date' in df.columns:
@@ -1103,7 +1104,7 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], downcast='float')
     
-    return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
+    return compress_to_parquet(df) if dfs_to_concat else compress_to_parquet(pd.DataFrame())
 
 def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
     if metric_col not in earliest_vals.columns or project_count == 0:
@@ -1276,10 +1277,6 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) format_func
         # lookup in the Streamlit render loop. The old string replacement was evaluated
         # on every item on every render cycle.
-        metric_names_dict = {m: m.replace('_', ' ').title() for m in available_metrics}
-        
-        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
-        # This prevents repeatedly executing .replace() and .title() on every render loop
         metric_display_names = {m: m.replace('_', ' ').title() for m in available_metrics}
 
         st.multiselect(
@@ -1288,7 +1285,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: metric_names_dict.get(m, m),
+            format_func=lambda m: metric_display_names.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
