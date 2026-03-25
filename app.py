@@ -1273,6 +1273,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) format_func
+        # lookup in the Streamlit render loop. The old string replacement was evaluated
+        # on every item on every render cycle.
+        metric_names_dict = {m: m.replace('_', ' ').title() for m in available_metrics}
         
         # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
         # This prevents repeatedly executing .replace() and .title() on every render loop
@@ -1284,7 +1288,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: metric_display_names.get(m, m),
+            format_func=lambda m: metric_names_dict.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
@@ -1338,9 +1342,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
+        st.info("Please select at least one metric to render the trend analysis.", icon="ℹ️")
         
-    if not df.empty and confirmed_metrics:
+    elif not df.empty:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
