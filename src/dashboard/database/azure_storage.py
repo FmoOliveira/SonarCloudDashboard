@@ -140,7 +140,7 @@ class AzureTableStorage(StorageInterface):
                 })
             except Exception as e:
                 logging.warning(f"Failed to update project metadata: {str(e)}")
-                st.warning("Failed to update project metadata. An internal error occurred.")
+                st.warning("Failed to update project metadata. An internal error occurred.", icon="⚠️")
 
             return True
             
@@ -214,13 +214,13 @@ class AzureTableStorage(StorageInterface):
             if len(results) > self.MAX_RETRIEVAL_LIMIT:
                  # Truncate the extra item and warn
                  results.pop()
-                 st.warning(f"Data retrieval limit ({self.MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.")
+                 st.warning(f"Data retrieval limit ({self.MAX_RETRIEVAL_LIMIT}) reached. Results are truncated. Please shorten the date range.", icon="⚠️")
 
             return results
             
         except Exception as e:
             logging.warning(f"Failed to retrieve metrics data: {str(e)}")
-            st.warning("Failed to retrieve metrics data. An internal error occurred.")
+            st.warning("Failed to retrieve metrics data. An internal error occurred.", icon="⚠️")
             return []
     
     def check_data_coverage(self, project_key: str, branch: str = None, days: int = 30) -> Dict[str, any]:
@@ -330,7 +330,7 @@ class AzureTableStorage(StorageInterface):
             for i, entity in enumerate(entities):
                 # Security check: Limit max records retrieved during scan
                 if i >= self.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Project scan limit ({self.MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.")
+                    st.warning(f"Project scan limit ({self.MAX_RETRIEVAL_LIMIT}) reached. List may be incomplete. Please check database.", icon="⚠️")
                     break
 
                 if 'ProjectKey' in entity:
@@ -359,13 +359,13 @@ class AzureTableStorage(StorageInterface):
                 })
             except Exception as backfill_error:
                 logging.warning(f"Metadata backfill failed: {str(backfill_error)}")
-                st.warning("Metadata backfill failed. An internal error occurred.")
+                st.warning("Metadata backfill failed. An internal error occurred.", icon="⚠️")
 
             return project_list
             
         except Exception as e:
             logging.warning(f"Failed to retrieve stored projects: {str(e)}")
-            st.warning("Failed to retrieve stored projects. An internal error occurred.")
+            st.warning("Failed to retrieve stored projects. An internal error occurred.", icon="⚠️")
             return []
     
     def delete_project_data(self, project_key: str, branch: str = None) -> bool:
@@ -427,7 +427,7 @@ class AzureTableStorage(StorageInterface):
             except Exception as e:
                 # Log but don't fail
                 logging.warning(f"Failed to cleanup metadata: {str(e)}")
-                st.warning("Failed to cleanup metadata. An internal error occurred.")
+                st.warning("Failed to cleanup metadata. An internal error occurred.", icon="⚠️")
 
             return True
             

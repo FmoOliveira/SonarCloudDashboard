@@ -49,7 +49,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning("Could not fetch branches. An internal error occurred.")
+        st.warning("Could not fetch branches. An internal error occurred.", icon="⚠️")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:

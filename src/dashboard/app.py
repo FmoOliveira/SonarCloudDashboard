@@ -144,17 +144,24 @@ def main():
             cookies["auth_state"] = state
             cookies.save()
 
-        auth_url = get_auth_url(state=state)
-        with st.sidebar:
-            render_theme_toggle()
-        
-        # Render prominent login page in main content area
-        render_login_page(auth_url)
-        st.stop()
+        is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
+        if not is_demo_mode:
+            auth_url = get_auth_url(state=state)
+            with st.sidebar:
+                render_theme_toggle()
+
+            # Render prominent login page in main content area
+            render_login_page(auth_url)
+            st.stop()
+        else:
+            safe_user_name = "Demo User"
+            safe_initials = "DU"
+            safe_photo_b64 = ""
+            safe_popover_label = "👤 Demo User"
             
-    is_demo_mode = "--demo-mode" in sys.argv
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
     if is_demo_mode:
-        st.sidebar.warning("🛠️ Demo Mode")
+        st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
         api, storage, organization = None, None, "demo-org"
         projects = [{"key": "demo-project-alpha", "name": "Frontend Web Application"}]
     else:
