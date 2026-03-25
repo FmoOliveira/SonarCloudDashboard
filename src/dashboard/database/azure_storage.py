@@ -125,7 +125,7 @@ class AzureTableStorage(StorageInterface):
                         self.table_client.submit_transaction(operations)
                     except Exception as batch_error:
                         logging.error(f"Failed to store transaction batch: {str(batch_error)}")
-                        st.error("Failed to store transaction batch. An internal error occurred.")
+                        st.error("Failed to store transaction batch. An internal error occurred.", icon="🚨")
                         return False
 
             # Update metadata partition
@@ -146,7 +146,7 @@ class AzureTableStorage(StorageInterface):
             
         except Exception as e:
             logging.error(f"Failed to store metrics data: {str(e)}")
-            st.error("Failed to store metrics data. An internal error occurred.")
+            st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
             return False
     
     def retrieve_metrics_data(self, project_key: str, branch: Optional[str] = None, days: int = 30) -> List[Dict]:
@@ -433,5 +433,5 @@ class AzureTableStorage(StorageInterface):
             
         except Exception as e:
             logging.error(f"Failed to delete project data: {str(e)}")
-            st.error("Failed to delete project data. An internal error occurred.")
+            st.error("Failed to delete project data. An internal error occurred.", icon="🚨")
             return False
