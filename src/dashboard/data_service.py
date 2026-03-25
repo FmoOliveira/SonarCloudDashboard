@@ -39,7 +39,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects. An internal error occurred.")
+        st.error("Error fetching projects. An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes

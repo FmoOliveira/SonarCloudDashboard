@@ -32,7 +32,16 @@ Critical UX learnings and observations only.
 ### Empty States
 *   **Observation**: An empty dataframe or chart looks like a bug.
 *   **Fix**: Always check for `if df.empty:` and render a helpful `st.info` or `st.warning` message explaining why no data is shown (e.g., "No data found for the selected time range.").
+
+* Using explicit icons on feedback widgets (`st.info`, `st.warning`, `st.error`) drastically improves visual hierarchy. Users can scan errors or warnings quickly. This was missing in several places in the dashboard which resulted in inconsistent visual state representations.
 *   **Streamlit Form State-Loss Bug**: Input widgets (like `st.selectbox` and conditional `st.date_input`) must not be placed inside an `st.form` if selecting them needs to trigger a conditional UI re-render (like showing an extra date field for a "Custom range" option). The script rerun cycle will ignore these inputs until the whole form is submitted, destroying the intended interactive UX. Keep conditional trigger inputs OUTSIDE the form.
 
 ### Avoid `st.stop()` for Empty States
 * When a multiselect or filter returns an empty state, avoid using `st.stop()` to halt the script (e.g. `if not selection: st.stop()`). This abruptly halts the entire page execution and hides all subsequent components (like data tables). Instead, use conditional blocks (`if selection: render_charts()`) combined with native info components (`st.info("No selection", icon="ℹ️")`) to preserve the remaining page layout gracefully.
+### Unintended Script Halting (st.stop Layout Bug)
+*   **Observation**: Using `st.stop()` within a conditional flow (e.g. `if not selected_metrics: st.stop()`) to prevent rendering a specific chart effectively halts the entire script. This destroys any layout or interactive components that exist *below* that section (such as a detailed data table).
+*   **Fix**: Never use `st.stop()` simply to hide a component. Instead, wrap the component's rendering logic in an explicit `if` condition (e.g., `if selected_metrics: render_chart()`), allowing the rest of the application layout to continue cascading naturally.
+
+### st.pills Deselection Bug
+*   **Observation**: Streamlit `st.pills` with `selection_mode="single"` allows the user to deselect the active option, resulting in the session state value becoming `None`. When using this state to look up dictionary keys (like preset configurations), it triggers a `KeyError` and crashes the application.
+*   **Fix**: To resolve this state-loss bug during reruns, always add a fallback check (e.g., `if not selected_preset: selected_preset = "Default"`) in the `on_change` callback before accessing dictionaries, and optionally reset the state variable to the fallback so the UI visually resets.

@@ -87,5 +87,5 @@ def logout(cookies=None):
                 del cookies[key]
         cookies.save()
             
-    st.info("You have been logged out.")
+    st.info("You have been logged out.", icon="👋")
     st.rerun()
