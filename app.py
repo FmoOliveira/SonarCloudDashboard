@@ -671,7 +671,7 @@ def main():
 
         # --- Dedicated Custom Date Range State ---
         custom_days = None
-        is_invalid_date_range = False
+        disable_submit = False
         if date_range == "Custom range...":
             # Inject a secondary input field when 'Custom' is selected
             date_vals = st.date_input(
@@ -690,7 +690,7 @@ def main():
                 custom_days = max(1, custom_days)
             elif isinstance(date_vals, tuple) and len(date_vals) == 1:
                 st.info("Please select an end date to complete the range.", icon="📅")
-                is_invalid_date_range = True
+                disable_submit = True
                 custom_days = 30
             else:
                 custom_days = 30
@@ -721,7 +721,7 @@ def main():
                 type="primary", 
                 use_container_width=True,
                 icon=":material/analytics:",
-                disabled=is_invalid_date_range
+                disabled=disable_submit
             )
 
         # 4. Visually separate secondary administrative actions
