@@ -241,9 +241,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
+        st.info("Please select at least one metric to render the trend analysis.", icon="ℹ️")
         
-    if not df.empty and confirmed_metrics:
+    elif not df.empty:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
