@@ -21,13 +21,14 @@ def get_secret(domain: str, key: str) -> str:
     try:
         return st.secrets[domain][key]
     except FileNotFoundError:
-        st.error("Security Configuration Error: `secrets.toml` is missing.", icon="🚨")
+        logging.error("Security Configuration Error: `secrets.toml` is missing.")
+        st.error("Security Configuration Error: A required configuration file is missing.", icon="🚨")
         st.stop()
         return ""
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error(error_msg, icon="🚨")
+        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
         st.stop()
         return ""
 
@@ -38,7 +39,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects. An internal error occurred.")
+        st.error("Error fetching projects. An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes

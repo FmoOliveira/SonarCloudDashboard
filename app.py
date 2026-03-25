@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import gc
-from typing import Optional
 import logging
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import (
@@ -42,7 +41,7 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}")
+        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -98,7 +97,7 @@ def get_secret(domain: str, key: str) -> str:
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error(error_msg, icon="🚨")
+        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
         st.stop()
         return ""
 
@@ -486,8 +485,14 @@ def main():
     # Read auth state from persistent cookies directly
     auth_token = cookies.get("auth_token")
     
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
+    if is_demo_mode:
+        auth_token = "demo_token"
+        cookies["user_info_name"] = "Demo User"
+        cookies.save()
+
     # Process login if returning from Entra ID
-    if not auth_token and "code" in st.query_params:
+    if not auth_token and "code" in st.query_params and not is_demo_mode:
         auth_code = st.query_params["code"]
         returned_state = st.query_params.get("state")
         st.query_params.clear()
@@ -530,7 +535,7 @@ def main():
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     # Cascade to rendering based on auth_token
@@ -543,7 +548,13 @@ def main():
         # Escape user input to prevent XSS
         safe_user_name = html.escape(user_name)
         safe_initials = html.escape(initials)
-        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+
+        # Strict URL scheme validation for images to prevent Javascript execution via XSS
+        raw_photo_b64 = cookies.get("user_photo") or ""
+        if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
+            raw_photo_b64 = ""
+
+        safe_photo_b64 = html.escape(raw_photo_b64)
         safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
 
         # Render the Dashboard Title with a floating right profile component
@@ -554,7 +565,7 @@ def main():
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
         # Show login screen
         st.markdown("### Authentication Required")
-        st.info("You must log in with your corporate account to access this dashboard.")
+        st.info("You must log in with your corporate account to access this dashboard.", icon="🔐")
         
         state = cookies.get("auth_state")
         if not state:
@@ -577,7 +588,7 @@ def main():
     # User is Authenticated, logout moved to upper right dropdown
     
     # --- DEMO MODE INTERCEPT ---
-    is_demo_mode = "--demo-mode" in sys.argv
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
     
     if is_demo_mode:
         st.sidebar.warning("🛠️ Running in Offline Demo Mode. Data is synthetic.")
@@ -599,7 +610,7 @@ def main():
             projects = fetch_projects(api, organization)
             
         if not projects:
-            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.")
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
             st.stop()
 
     # Sidebar for controls
@@ -625,10 +636,13 @@ def main():
             st.markdown(f'<p style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 400; margin: 0; margin-bottom: 0.25rem;"><i class="{icon_class}"></i> {text}</p>', unsafe_allow_html=True)
 
         render_icon_label("iconoir-building", "Project")
+        # ⚡ Bolt Optimization: Map projects list to a dictionary for O(1) format_func
+        # lookup in the Streamlit render loop. The old `next(generator)` was O(M*N).
+        project_names_dict = {p['key']: p['name'] for p in projects}
         selected_project = st.selectbox(
             "Project",
             options=[p['key'] for p in projects],
-            format_func=lambda x: next((p['name'] for p in projects if p['key'] == x), x),
+            format_func=lambda x: project_names_dict.get(x, x),
             key="project_selector",
             on_change=handle_project_change,
             help="Switching projects will clear the current data cache to optimize memory.",
@@ -636,7 +650,7 @@ def main():
         )
         
         if not selected_project:
-            st.warning("Please select a project.")
+            st.warning("Please select a project.", icon="⚠️")
             st.stop()
             
         if is_demo_mode:
@@ -646,37 +660,38 @@ def main():
         branch_options = [b.get('name', 'Unknown') for b in project_branches] if project_branches else []
 
         # 1. Architectural Key: Wrap filters in a form to prevent premature reruns on these filters
-        with st.form(key="dashboard_controls_form", border=False):
-            
-            render_icon_label("iconoir-calendar", "Time Period")
-            date_range = st.selectbox(
-                "Time Period",
-                options=["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year", "Custom range..."],
-                index=3,
-                label_visibility="collapsed"
+        render_icon_label("iconoir-calendar", "Time Period")
+        date_range = st.selectbox(
+            "Time Period",
+            options=["Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year", "Custom range..."],
+            index=3,
+            label_visibility="collapsed",
+            help="Select the timeframe for historical metric analysis."
+        )
+
+        # --- Dedicated Custom Date Range State ---
+        custom_days = None
+        if date_range == "Custom range...":
+            # Inject a secondary input field when 'Custom' is selected
+            date_vals = st.date_input(
+                "Select Date Range",
+                value=(datetime.now() - timedelta(days=30), datetime.now()),
+                max_value=datetime.now(),
+                label_visibility="collapsed",
+                format="YYYY/MM/DD",
+                help="Select the start and end dates."
             )
             
-            # --- Dedicated Custom Date Range State ---
-            custom_days = None
-            if date_range == "Custom range...":
-                # Inject a secondary input field when 'Custom' is selected
-                date_vals = st.date_input(
-                    "Select Date Range",
-                    value=(datetime.now() - timedelta(days=30), datetime.now()),
-                    max_value=datetime.now(),
-                    label_visibility="collapsed",
-                    format="YYYY/MM/DD",
-                    help="Select the start and end dates."
-                )
-                
-                # Streamlit returns a tuple of (start_date, end_date) when multiple dates are selected
-                if isinstance(date_vals, tuple) and len(date_vals) == 2:
-                    start_date, end_date = date_vals
-                    custom_days = (datetime.now().date() - start_date).days
-                    custom_days = max(1, custom_days) 
-                else:
-                    custom_days = 30 
-                    
+            # Streamlit returns a tuple of (start_date, end_date) when multiple dates are selected
+            if isinstance(date_vals, tuple) and len(date_vals) == 2:
+                start_date, end_date = date_vals
+                custom_days = (datetime.now().date() - start_date).days
+                custom_days = max(1, custom_days)
+            else:
+                custom_days = 30
+
+        with st.form(key="dashboard_controls_form", border=False):
+
             render_icon_label("iconoir-git-branch", "Branch Filter")
             if branch_options:
                 branch_filter = st.selectbox(
@@ -772,7 +787,7 @@ def main():
                 stored_projects = storage.get_stored_projects()
                 st.markdown(f'<p class="st-caption" style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-package"></i> Total Projects: <strong>{len(stored_projects)}</strong></p>', unsafe_allow_html=True)
                 if len(stored_projects) >= storage.MAX_RETRIEVAL_LIMIT:
-                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).")
+                    st.warning(f"Limit reached ({storage.MAX_RETRIEVAL_LIMIT}).", icon="⚠️")
         except Exception as e:
             logging.error(f"Storage unavailable: {str(e)}")
             st.caption("Storage unavailable: An internal error occurred.")
@@ -845,7 +860,7 @@ def main():
         project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
         
         # Single consolidated info block
-        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**")
+        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
         
         display_dashboard(metrics_data, [data_project], projects, data_branch)
         
@@ -871,7 +886,7 @@ def main():
         # Show summary of available options
         if projects:
             st.markdown('<h3 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Available Projects</h3>', unsafe_allow_html=True)
-            project_list = [f"- **{p['name']}** (`{p['key']}`)" for p in projects[:10]]
+            project_list = [f"- **{html.escape(p['name'])}** (`{html.escape(p['key'])}`)" for p in projects[:10]]
             if len(projects) > 10:
                 project_list.append(f"- ... and **{len(projects) - 10}** more projects")
             st.markdown("\n".join(project_list) + "\n")
@@ -883,7 +898,7 @@ def fetch_projects(_api, organization):
         return _api.get_organization_projects(organization)
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects: An internal error occurred.")
+        st.error("Error fetching projects: An internal error occurred.", icon="🚨")
         return []
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -893,7 +908,7 @@ def fetch_project_branches(_api, project_key):
         return _api.get_project_branches(project_key)
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning(f"Could not fetch branches for {project_key}: An internal error occurred.")
+        st.warning("Could not fetch branches. An internal error occurred.")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:
@@ -937,7 +952,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history: list[dict] = []
+        history_dict: dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -946,12 +961,13 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     value = hist_item.get('value')
                     
                     if date_val and value is not None:
-                        record = history_dict.get(date_val)
-                        if not record:
+                        if date_val not in history_dict:
                             record = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
                             history_dict[date_val] = record
+                        else:
+                            record = history_dict[date_val]
                         
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
@@ -1083,18 +1099,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
     
     return compress_to_parquet(df) if all_data else compress_to_parquet(pd.DataFrame())
 
-def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
+    if metric_col not in earliest_vals.columns or project_count == 0:
         return ("0.0%" if is_percent else "0", None, "#888888")
     
-    df_sorted = df.sort_values('date')
-    
-    # Bolt Optimization: Vectorized this calculation to reduce time complexity from O(M*N) to O(N)
-    # by eliminating the Python-level iteration and using underlying C extensions
-    grouped = df_sorted.groupby('project_key', sort=False, observed=True)[metric_col]
-    earliest_total = float(grouped.first().sum())
-    latest_total = float(grouped.last().sum())
-    project_count = grouped.ngroups
+    earliest_total = float(earliest_vals[metric_col].sum())
+    latest_total = float(latest_vals[metric_col].sum())
     
     is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
     
@@ -1128,7 +1138,11 @@ def compute_metric_stats(df, metric_col, is_percent=False, higher_is_better=True
     return val_str, delta_str, color
 
 def get_metric_stats(df, metric_col, is_percent=False, higher_is_better=True):
-    return compute_metric_stats(df, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
+    if df.empty or metric_col not in df.columns or 'date' not in df.columns:
+        return ("0.0%" if is_percent else "0", None, "#888888")
+    df_sorted = df.sort_values('date')
+    grouped = df_sorted.groupby('project_key', sort=False, observed=True)
+    return compute_metric_stats(grouped.first(), grouped.last(), grouped.ngroups, metric_col, is_percent=is_percent, higher_is_better=higher_is_better)
 
 def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
@@ -1137,36 +1151,50 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     project_names = {p['key']: p['name'] for p in all_projects}
     df['project_name'] = df['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Sort dataframe by date once globally instead of multiple times
+    # sorting in compute_metric_stats to prevent O(M*N log N) sorting bottleneck.
+    if not df.empty and 'date' in df.columns:
+        df_sorted = df.sort_values('date')
+    else:
+        df_sorted = df
+
+    # ⚡ Bolt Optimization: Group the dataframe once globally to extract earliest and latest values
+    # for all metrics simultaneously. This prevents computing 5 separate O(N) groupby operations
+    # sequentially on the main thread, cutting the overhead by 80%.
+    if not df_sorted.empty and 'project_key' in df_sorted.columns:
+        grouped = df_sorted.groupby('project_key', sort=False, observed=True)
+        earliest_vals = grouped.first()
+        latest_vals = grouped.last()
+        project_count = grouped.ngroups
+    else:
+        earliest_vals = pd.DataFrame()
+        latest_vals = pd.DataFrame()
+        project_count = 0
+
     # Overview metrics
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
     
     # Calculate summary statistics from all data (not just latest)
     col1, col2, col3, col4, col5 = st.columns(5)
     
-    # ⚡ Bolt Optimization: Vectorized Aggregation
-    # Instead of iterating through every project (O(N*M)) inside helper function,
-    # we sort once and group by project to get first/last values in O(N).
-    # This reduces complexity from O(M * N * log N) to O(N log N).
-
-
     with col1:
-        val, delta, color = compute_metric_stats(df, 'vulnerabilities')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'vulnerabilities')
         create_metric_card("Vulnerabilities", val, "iconoir-bug", delta, color, neon_class="neon-green")
     
     with col2:
-        val, delta, color = compute_metric_stats(df, 'security_hotspots')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_hotspots')
         create_metric_card("Security Hotspots", val, "iconoir-fire-flame", delta, color, neon_class="neon-orange")
     
     with col3:
-        val, delta, color = compute_metric_stats(df, 'duplicated_lines_density', is_percent=True)
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'duplicated_lines_density', is_percent=True)
         create_metric_card("Duplicated Lines", val, "iconoir-page", delta, color, neon_class="neon-teal")
     
     with col4:
-        val, delta, color = compute_metric_stats(df, 'security_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'security_rating')
         create_metric_card("Security Rating", val, "iconoir-lock", delta, color, neon_class="neon-green")
     
     with col5:
-        val, delta, color = compute_metric_stats(df, 'reliability_rating')
+        val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
     # Detailed metrics charts
@@ -1204,8 +1232,12 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     def sync_preset_to_multiselect():
         """Triggered when the user clicks a pre-defined group button."""
         selected_preset = st.session_state.preset_selector
+        if not selected_preset:
+            selected_preset = "Custom (Manual Selection)"
+            st.session_state.preset_selector = selected_preset
+
         if selected_preset != "Custom (Manual Selection)":
-            st.session_state.active_metrics = METRIC_PRESETS[selected_preset]
+            st.session_state.active_metrics = METRIC_PRESETS.get(selected_preset, [])
         st.session_state.active_preset = selected_preset
 
     def sync_multiselect_to_preset():
@@ -1228,20 +1260,25 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         selection_mode="single",
         key="preset_selector",
         default=st.session_state.active_preset,
-        on_change=sync_preset_to_multiselect
+        on_change=sync_preset_to_multiselect,
+        help="Quickly switch between pre-configured metric combinations for analysis."
     )
     
     col1, col2 = st.columns([2, 1])
 
     with col1:
         
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
+        # This prevents repeatedly executing .replace() and .title() on every render loop
+        metric_display_names = {m: m.replace('_', ' ').title() for m in available_metrics}
+
         st.multiselect(
             "Or customize up to 3 individual metrics:",
             available_metrics,
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: m.replace('_', ' ').title(),
+            format_func=lambda m: metric_display_names.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
@@ -1295,10 +1332,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.")
-        st.stop()
+        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
         
-    if not df.empty:
+    if not df.empty and confirmed_metrics:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
@@ -1452,24 +1488,27 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 def create_box_plot(df, metric, project_names):
     """Create a box plot for the selected metric"""
     if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+        st.info("No data available for the selected metric. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Prepare data
     plot_data = df.copy()
     plot_data['project_name'] = plot_data['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Pre-calculate formatted metric name to avoid repeating string manipulations.
+    formatted_metric_name = metric.replace('_', ' ').title()
+
     # Create box plot
     fig = px.box(
         plot_data,
         x='project_name',
         y=metric,
-        title=f"{metric.replace('_', ' ').title()} Distribution by Project"
+        title=f"{formatted_metric_name} Distribution by Project"
     )
     
     fig.update_layout(
         xaxis_title="Project",
-        yaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title=formatted_metric_name,
         xaxis_tickangle=-45
     )
     

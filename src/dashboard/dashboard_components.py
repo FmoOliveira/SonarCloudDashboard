@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import io
 import html
+from typing import Optional
 
 # Modern dashboard palette
 CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -65,7 +66,7 @@ def apply_modern_layout(fig):
     )
     return fig
 
-def create_metric_card(title: str, value: str, icon_class: str, delta: str = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
+def create_metric_card(title: str, value: str, icon_class: str, delta: Optional[str] = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
@@ -104,7 +105,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     Dynamically scales height based on the number of metrics.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     num_metrics = len(metrics)
@@ -117,13 +118,17 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     # Calculate total figure height
     total_height = (num_metrics * BASE_ROW_HEIGHT) + CHART_CHROME_PADDING
 
+    # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
+    # to avoid O(N) string manipulations in the Plotly rendering loop.
+    metric_display_names = {m: m.replace('_', ' ').title() for m in metrics}
+
     from plotly.subplots import make_subplots
     fig = make_subplots(
         rows=num_metrics, 
         cols=1, 
         shared_xaxes=True,
         vertical_spacing=0.08, # Provide breathing room between the X-axis and the next title
-        subplot_titles=[m.replace('_', ' ').title() for m in metrics]
+        subplot_titles=[metric_display_names.get(m, m) for m in metrics]
     )
     
     # Prepare data for plotting
@@ -133,7 +138,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     if 'date' in plot_data.columns:
         plot_data = plot_data.sort_values('date')
     else:
-        st.warning("No date information available for trend analysis.")
+        st.info("No date information available for trend analysis. Please try adjusting your filters.", icon="ℹ️")
         return
 
     from datetime import timedelta
@@ -154,13 +159,19 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 
     projects = plot_data['project_name'].unique()
     
+    # ⚡ Bolt Optimization: Pre-group dataframe by project outside the nested loop.
+    # Replaces O(N) boolean indexing (plot_data[plot_data['project_name'] == project])
+    # inside an O(M * P) loop with an O(N) grouping and O(1) dictionary lookups.
+    # This prevents main-thread blocking during heavy Plotly rendering.
+    project_data_dict = {project: group for project, group in plot_data.groupby('project_name', observed=True)}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             row_idx = i + 1 
             
             # Add a trace for each project
             for j, project in enumerate(projects):
-                project_data = plot_data[plot_data['project_name'] == project]
+                project_data = project_data_dict.get(project, pd.DataFrame())
                 
                 is_single_project = len(projects) == 1
                 
@@ -168,7 +179,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
                 # If multiple projects, color by project and show project in legend (only on first subplot).
                 if is_single_project:
                     trace_color = CHART_COLORS[i % len(CHART_COLORS)]
-                    trace_name = metric.replace('_', ' ').title()
+                    trace_name = metric_display_names.get(metric, metric)
                     trace_legendgroup = metric
                     show_legend_for_trace = True # Show legend for each metric
                 else:
@@ -215,7 +226,7 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     xaxis_updates = {}
     for i in range(1, num_metrics + 1):
         axis_key = f"xaxis{i}" if i > 1 else "xaxis"
-        axis_dict = dict(
+        axis_dict: dict = dict(
             type='date',
             range=xaxis_range,
             showgrid=False,
@@ -242,26 +253,29 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
 def create_comparison_chart(df: pd.DataFrame, metric: str, project_names: dict):
     """Create a bar chart comparing projects"""
     if df.empty or metric not in df.columns:
-        st.warning("No data available for the selected metric.")
+        st.info("No data available for the selected metric. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
     latest_data = df.groupby('project_key', observed=True)[metric].last().reset_index()
     latest_data['project_name'] = latest_data['project_key'].map(project_names)
     
+    # ⚡ Bolt Optimization: Pre-calculate the formatted title to avoid repeating string manipulations.
+    formatted_metric_name = metric.replace('_', ' ').title()
+
     # Create bar chart
     fig = px.bar(
         latest_data,
         x='project_name',
         y=metric,
-        title=f"{metric.replace('_', ' ').title()} by Project",
+        title=f"{formatted_metric_name} by Project",
         color='project_name', # Color by project name to use custom palette
         color_discrete_sequence=CHART_COLORS
     )
     
     fig.update_layout(
         xaxis_title="",
-        yaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title=formatted_metric_name,
         xaxis_tickangle=-45,
         showlegend=False
     )
@@ -277,7 +291,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     Renders an overlaid area chart optimized for dark mode visibility.
     """
     if df.empty or not metrics:
-        st.warning("No data available for the selected metrics.")
+        st.info("No data available for the selected metrics. Please try adjusting your filters.", icon="ℹ️")
         return
         
     fig = go.Figure()
@@ -302,6 +316,10 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     except Exception:
         pass # fallback to default order
 
+    # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
+    # to avoid O(N) string manipulations in the Plotly rendering loop.
+    metric_display_names = {m: m.replace('_', ' ').title() for m in metrics}
+
     for i, metric in enumerate(metrics):
         if metric in plot_data.columns:
             line_color, fill_color = color_palette[i % len(color_palette)]
@@ -311,7 +329,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
                     x=plot_data[date_col],
                     y=plot_data[metric],
                     mode='lines',
-                    name=metric.replace('_', ' ').title(),
+                    name=metric_display_names.get(metric, metric),
                     # spline smoothing maintains the modern aesthetic
                     line=dict(width=2, color=line_color, shape='spline', smoothing=0.8), 
                     fill='tozeroy',          # Fills the area down to the X-axis (Y=0)
@@ -405,7 +423,7 @@ def create_coverage_donut(coverage_value: float):
 def create_quality_gate_status(projects_data: pd.DataFrame):
     """Create a summary of quality gate status across projects"""
     if projects_data.empty:
-        st.warning("No project data available.")
+        st.info("No project data available. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Mock quality gate status based on metrics
@@ -434,10 +452,12 @@ def create_quality_gate_status(projects_data: pd.DataFrame):
         df['project_key'] = 'Unknown'
 
     df['project'] = df['project_key'].fillna('Unknown')
-    quality_gates = df[['project', 'status', 'color']].to_dict('records')
+    _ = df[['project', 'status', 'color']].to_dict('records')
     
     # Create status summary
-    status_counts = pd.DataFrame(quality_gates)['status'].value_counts()
+    # ⚡ Bolt Optimization: Replace O(N) dict conversion + DataFrame recreation
+    # with a direct O(1) vectorized operation on the existing series.
+    status_counts = df['status'].value_counts()
     
     fig = px.pie(
         values=status_counts.values,
@@ -477,7 +497,7 @@ def format_metric_value(metric: str, value):
 def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     """Create a heatmap of metrics across projects"""
     if df.empty:
-        st.warning("No data available for heatmap.")
+        st.info("No data available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Get latest data for each project
@@ -489,7 +509,7 @@ def create_metrics_heatmap(df: pd.DataFrame, project_names: dict):
     available_metrics = [m for m in numeric_metrics if m in latest_data.columns]
     
     if not available_metrics:
-        st.warning("No numeric metrics available for heatmap.")
+        st.info("No numeric metrics available for heatmap. Please try adjusting your filters.", icon="ℹ️")
         return
     
     # Prepare data for heatmap

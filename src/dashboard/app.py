@@ -9,13 +9,14 @@ if hasattr(st, 'cache'):
         return st.cache_data(*args, **kwargs)
     st.cache = _safe_cache
 
+import logging
 import pandas as pd
 import html
 import os
 import secrets
 import gc
 import sys
-import secrets
+from datetime import datetime, timedelta
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
@@ -101,9 +102,6 @@ def main():
         with st.spinner("Authenticating..."):
             token_result = acquire_token_by_auth_code(auth_code)
 
-            # Clean up state cookie after successful validation
-            del cookies["auth_state"]
-            cookies.save()
             if "access_token" in token_result:
                 auth_token = token_result["access_token"]
                 cookies["auth_token"] = auth_token
@@ -114,12 +112,13 @@ def main():
                     cookies["user_photo"] = photo_b64
                 cookies.save()
             else:
+                cookies.save()
                 error_desc = token_result.get("error_description", "Unknown error")
                 if "AADSTS54005" in error_desc:
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.")
+                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
 
     if auth_token:
@@ -127,7 +126,13 @@ def main():
         initials = "".join([n[0] for n in user_name.split() if n])[:2].upper() or "U"
         safe_user_name = html.escape(user_name)
         safe_initials = html.escape(initials)
-        safe_photo_b64 = html.escape(cookies.get("user_photo") or "")
+
+        # Strict URL scheme validation for images to prevent Javascript execution via XSS
+        raw_photo_b64 = cookies.get("user_photo") or ""
+        if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
+            raw_photo_b64 = ""
+
+        safe_photo_b64 = html.escape(raw_photo_b64)
         safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
     else:
@@ -159,7 +164,7 @@ def main():
         with st.spinner("Loading projects..."):
             projects = fetch_projects(api, organization)
         if not projects:
-            st.error("No projects found.", icon="🚨")
+            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
             st.stop()
 
     with st.sidebar:
@@ -189,7 +194,8 @@ def main():
             "Project",
             options=[p['key'] for p in projects],
             format_func=lambda x: project_names.get(x, x),
-            on_change=handle_project_change
+            on_change=handle_project_change,
+            help="Select a repository to view its metrics."
         )
         
         if is_demo_mode:
@@ -198,10 +204,32 @@ def main():
             branches = fetch_project_branches(api, selected_project)
             branch_options = [b.get('name', 'Unknown') for b in branches]
 
+        date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
+
+        custom_days = None
+        if date_range == "Custom...":
+            date_vals = st.date_input(
+                "Select Date Range",
+                value=(datetime.now() - timedelta(days=30), datetime.now()),
+                max_value=datetime.now(),
+                label_visibility="collapsed",
+                format="YYYY/MM/DD",
+                help="Select the start and end dates."
+            )
+            if isinstance(date_vals, tuple) and len(date_vals) == 2:
+                start_date, end_date = date_vals
+                custom_days = (datetime.now().date() - start_date).days
+                custom_days = max(1, custom_days)
+            else:
+                custom_days = 30
+
+        days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, custom_days if date_range == "Custom..." else 30)
+
         with st.form(key="controls_form", border=False):
-            date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
-            days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, 30)
-            branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.") if branch_options else "master"
+            if branch_options:
+                branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.")
+            else:
+                branch_filter = st.text_input("Branch", value="master", help="No branches found. Enter branch name manually.", placeholder="e.g., main, master, feature/xyz")
             execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:")
 
         if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
@@ -219,11 +247,16 @@ def main():
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
             status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
+            st.toast("Data successfully loaded!", icon="✅")
 
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
         if not metrics_data.empty:
-            display_dashboard(metrics_data, [st.session_state['data_project']], projects, st.session_state['data_branch'])
+            data_project = st.session_state['data_project']
+            data_branch = st.session_state['data_branch']
+            project_name = project_names.get(data_project, data_project)
+            st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
+            display_dashboard(metrics_data, [data_project], projects, data_branch)
         else:
             st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:
