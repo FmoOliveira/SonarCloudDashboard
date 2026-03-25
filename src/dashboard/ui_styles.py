@@ -13,7 +13,7 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}")
+        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
 
 def inject_custom_css():
     """Injects custom CSS for modern UI elements"""
