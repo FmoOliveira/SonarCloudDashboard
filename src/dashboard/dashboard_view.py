@@ -203,9 +203,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
-        # This prevents repeatedly executing .replace() and .title() on every render loop
-        metric_display_names = {m: m.replace('_', ' ').title() for m in available_metrics}
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) format_func
+        # lookup in the Streamlit render loop. The old string replacement was evaluated
+        # on every item on every render cycle.
+        metric_names_dict = {m: m.replace('_', ' ').title() for m in available_metrics}
 
         st.multiselect(
             "Or customize up to 3 individual metrics:",
@@ -213,7 +214,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: metric_display_names.get(m, m),
+            format_func=lambda m: metric_names_dict.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
@@ -240,9 +241,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
+        st.info("Please select at least one metric to render the trend analysis.", icon="ℹ️")
         
-    if not df.empty and confirmed_metrics:
+    elif not df.empty:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
@@ -278,17 +279,26 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         display_data = display_data[display_columns]
         display_data = display_data.sort_values(['date', 'project_name', 'branch'])
         
-        for col in display_data.columns:
-            if col not in ['project_name', 'date', 'project_key', 'branch']:
-                try:
-                    if 'rating' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
-                    elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
-                    else:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(int)
-                except Exception:
-                    display_data[col] = display_data[col].astype(str)
+        # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
+        # vectorized DataFrame-level operations. Applying to_numeric and fillna across
+        # column groups simultaneously prevents slow Python-level loops during Streamlit renders.
+        target_cols = [col for col in display_data.columns if col not in ['project_name', 'date', 'project_key', 'branch']]
+
+        if target_cols:
+            rating_cols = [c for c in target_cols if 'rating' in c]
+            float_cols = [c for c in target_cols if 'coverage' in c or 'density' in c or 'security_hotspots_reviewed' in c]
+            int_cols = [c for c in target_cols if c not in rating_cols and c not in float_cols]
+
+            try:
+                if rating_cols:
+                    display_data[rating_cols] = display_data[rating_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+                if float_cols:
+                    display_data[float_cols] = display_data[float_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).round(2)
+                if int_cols:
+                    display_data[int_cols] = display_data[int_cols].apply(pd.to_numeric, errors='coerce').fillna(0).astype(int)
+            except Exception:
+                for c in target_cols:
+                    display_data[c] = display_data[c].astype(str)
         
         column_config = {
             "date": st.column_config.DateColumn("Date", format="YYYY-MM-DD", width="medium"),

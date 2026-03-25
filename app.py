@@ -671,6 +671,7 @@ def main():
 
         # --- Dedicated Custom Date Range State ---
         custom_days = None
+        disable_submit = False
         if date_range == "Custom range...":
             # Inject a secondary input field when 'Custom' is selected
             date_vals = st.date_input(
@@ -687,6 +688,10 @@ def main():
                 start_date, end_date = date_vals
                 custom_days = (datetime.now().date() - start_date).days
                 custom_days = max(1, custom_days)
+            elif isinstance(date_vals, tuple) and len(date_vals) == 1:
+                st.info("Please select an end date to complete the range.", icon="📅")
+                disable_submit = True
+                custom_days = 30
             else:
                 custom_days = 30
 
@@ -715,7 +720,8 @@ def main():
                 "Load Dashboard", 
                 type="primary", 
                 use_container_width=True,
-                icon=":material/analytics:"
+                icon=":material/analytics:",
+                disabled=disable_submit
             )
 
         # 4. Visually separate secondary administrative actions
@@ -1267,6 +1273,10 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) format_func
+        # lookup in the Streamlit render loop. The old string replacement was evaluated
+        # on every item on every render cycle.
+        metric_names_dict = {m: m.replace('_', ' ').title() for m in available_metrics}
         
         # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups in format_func
         # This prevents repeatedly executing .replace() and .title() on every render loop
@@ -1278,7 +1288,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             key="metric_selector",
             max_selections=3,
             default=st.session_state.active_metrics,
-            format_func=lambda m: metric_display_names.get(m, m),
+            format_func=lambda m: metric_names_dict.get(m, m),
             on_change=sync_multiselect_to_preset,
             placeholder="Choose metrics to analyze...",
             help="Limiting selections ensures the trend charts remain readable without excessive scrolling."
@@ -1332,9 +1342,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     confirmed_metrics = st.session_state.get('metric_selector', [])
     
     if not confirmed_metrics:
-        st.info("Please select at least one metric to render the trend analysis.", icon="📊")
+        st.info("Please select at least one metric to render the trend analysis.", icon="ℹ️")
         
-    if not df.empty and confirmed_metrics:
+    elif not df.empty:
         fig = None
         if chart_type in ["Line Chart", "Bar Chart (Grouped)"]:
             plot_type = "Line Chart" if chart_type == "Line Chart" else "Bar Chart"
@@ -1380,20 +1390,26 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         display_data = display_data.sort_values(['date', 'project_name', 'branch'])
         
         # Format numeric columns
-        for col in display_data.columns:
-            if col not in ['project_name', 'date', 'project_key', 'branch']:
-                try:
-                    if 'rating' in col:
-                        # Keep ratings as float for proper sorting, format in st.dataframe column_config
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0)
-                    elif 'coverage' in col or 'density' in col or 'security_hotspots_reviewed' in col:
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0.0).round(2)
-                    else:
-                        # Handle integer columns
-                        display_data[col] = pd.to_numeric(display_data[col], errors='coerce').fillna(0).astype(int)
-                except Exception:
-                    # If conversion fails, keep as string
-                    display_data[col] = display_data[col].astype(str)
+        # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
+        # vectorized DataFrame-level operations. Applying to_numeric and fillna across
+        # column groups simultaneously prevents slow Python-level loops during Streamlit renders.
+        target_cols = [col for col in display_data.columns if col not in ['project_name', 'date', 'project_key', 'branch']]
+
+        if target_cols:
+            rating_cols = [c for c in target_cols if 'rating' in c]
+            float_cols = [c for c in target_cols if 'coverage' in c or 'density' in c or 'security_hotspots_reviewed' in c]
+            int_cols = [c for c in target_cols if c not in rating_cols and c not in float_cols]
+
+            try:
+                if rating_cols:
+                    display_data[rating_cols] = display_data[rating_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+                if float_cols:
+                    display_data[float_cols] = display_data[float_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).round(2)
+                if int_cols:
+                    display_data[int_cols] = display_data[int_cols].apply(pd.to_numeric, errors='coerce').fillna(0).astype(int)
+            except Exception:
+                for c in target_cols:
+                    display_data[c] = display_data[c].astype(str)
         
         # Define visual configuration for dataframe columns
         column_config = {

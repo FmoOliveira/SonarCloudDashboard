@@ -5,8 +5,15 @@ import requests
 
 import os
 
+@st.cache_resource(show_spinner=False)
 def get_msal_client():
-    """Initializes the MSAL Confidential Client Application using env vars or st.secrets."""
+    """
+    Initializes the MSAL Confidential Client Application as a cached singleton.
+    ⚡ Bolt Optimization: This ensures thread safety across Streamlit sessions,
+    allows MSAL to maintain its internal token cache, and completely eliminates
+    blocking synchronous network calls to Azure AD's OpenID configuration
+    endpoint on every unauthenticated page render.
+    """
     try:
         tenant_id = os.environ.get("AZURE_AD_TENANT_ID") or st.secrets["azure_ad"]["tenant_id"]
         client_id = os.environ.get("AZURE_AD_CLIENT_ID") or st.secrets["azure_ad"]["client_id"]

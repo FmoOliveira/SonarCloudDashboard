@@ -100,6 +100,10 @@
 **Vulnerability:** Internal error messages (e.g. from the Azure Table Storage SDK) were being directly rendered using `st.error()` and `st.warning()`, potentially leaking sensitive infrastructure details to the user.
 **Learning:** Error messages should be generic and not expose internal system details.
 **Prevention:** Replaced raw exception strings in `st.error()` with generic messages and logged the actual exceptions securely on the backend using `logging`.
+## 2026-03-09 - Streamlit MSAL Token Error Leakage Fix
+**Vulnerability:** When exchanging the authorization code with the Microsoft identity provider, the `error_description` in the response payload (which may contain internal Active Directory details or trace IDs) was being directly displayed on the frontend via `st.error()`.
+**Learning:** Returning detailed error descriptions from Identity Providers to unauthenticated users can leak infrastructure context and facilitate enumeration.
+**Prevention:** Catch identity provider error responses, log the raw payload securely via `logging.error()`, and return a sanitized, generic "Authentication failed: An internal error occurred" message to the user interface.
 
 ## 2026-03-10 - Refactoring Security Regression
 **Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`).
@@ -119,3 +123,8 @@
 **Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`), and the same vulnerability (`st.error(error_msg)`) was also found in the root `app.py`.
 **Learning:** When refactoring applications into multiple entry points (e.g., monolithic to modular architectures), critical security validations and error handling mechanisms are easily lost or mismatched if not centrally managed or explicitly audited. Both `app.py` versions must be checked for vulnerabilities.
 **Prevention:** Ensure that all error-handling boundaries and authentication paths are consolidated into shared security modules whenever possible, and strictly audit any duplicated routing logic between architectural versions.
+
+## 2026-03-12 - Streamlit Configuration XSS Vulnerability
+**Vulnerability:** The application read the `DATABASE_PROVIDER` configuration from user-controlled environment variables (`os.environ`) and interpolated it directly into an `st.error` UI component without escaping when an unsupported provider was provided.
+**Learning:** Even internal backend components like database factories, which read from system configuration or environment variables, can become an XSS vector if those variables are ultimately rendered on the frontend during error states.
+**Prevention:** Always use `html.escape()` to sanitize any string derived from environment variables, configuration files, or external inputs before interpolating it into Streamlit text or error components, regardless of whether `unsafe_allow_html=True` is explicitly set, to prevent markdown parsing exploits and visual spoofing.
