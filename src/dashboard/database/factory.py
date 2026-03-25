@@ -37,7 +37,7 @@ def get_storage_client() -> StorageInterface | None:
             st.stop()
             
         else:
-            safe_provider = html.escape(provider)
+            safe_provider = html.escape(str(provider))
             st.error(f"Unsupported database provider: '{safe_provider}'", icon="🚨")
             st.stop()
             
