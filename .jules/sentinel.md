@@ -100,6 +100,10 @@
 **Vulnerability:** Internal error messages (e.g. from the Azure Table Storage SDK) were being directly rendered using `st.error()` and `st.warning()`, potentially leaking sensitive infrastructure details to the user.
 **Learning:** Error messages should be generic and not expose internal system details.
 **Prevention:** Replaced raw exception strings in `st.error()` with generic messages and logged the actual exceptions securely on the backend using `logging`.
+## 2026-03-09 - Streamlit MSAL Token Error Leakage Fix
+**Vulnerability:** When exchanging the authorization code with the Microsoft identity provider, the `error_description` in the response payload (which may contain internal Active Directory details or trace IDs) was being directly displayed on the frontend via `st.error()`.
+**Learning:** Returning detailed error descriptions from Identity Providers to unauthenticated users can leak infrastructure context and facilitate enumeration.
+**Prevention:** Catch identity provider error responses, log the raw payload securely via `logging.error()`, and return a sanitized, generic "Authentication failed: An internal error occurred" message to the user interface.
 
 ## 2026-03-10 - Refactoring Security Regression
 **Vulnerability:** A previous fix that prevented exposing raw internal backend errors directly to the user (via `st.error`) was accidentally reverted or omitted in a newer modular application entry point (`src/dashboard/app.py`).
