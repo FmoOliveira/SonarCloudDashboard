@@ -1387,9 +1387,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         display_data = display_data.sort_values(['date', 'project_name', 'branch'])
         
         # Format numeric columns
-        # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
-        # vectorized DataFrame-level operations. Applying to_numeric and fillna across
-        # column groups simultaneously prevents slow Python-level loops during Streamlit renders.
+        # ⚡ Bolt Optimization: Replace df[cols].apply(pd.to_numeric) with an
+        # explicit Python loop updating a dictionary to prevent Python-level
+        # function dispatch overhead and intermediate DataFrame memory fragmentation.
         target_cols = [col for col in display_data.columns if col not in ['project_name', 'date', 'project_key', 'branch']]
 
         if target_cols:
@@ -1398,12 +1398,16 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             int_cols = [c for c in target_cols if c not in rating_cols and c not in float_cols]
 
             try:
-                if rating_cols:
-                    display_data[rating_cols] = display_data[rating_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
-                if float_cols:
-                    display_data[float_cols] = display_data[float_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).round(2)
-                if int_cols:
-                    display_data[int_cols] = display_data[int_cols].apply(pd.to_numeric, errors='coerce').fillna(0).astype(int)
+                update_data = {}
+                for c in rating_cols:
+                    update_data[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0)
+                for c in float_cols:
+                    update_data[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0.0).round(2)
+                for c in int_cols:
+                    update_data[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0).astype(int)
+
+                for k, v in update_data.items():
+                    display_data[k] = v
             except Exception:
                 for c in target_cols:
                     display_data[c] = display_data[c].astype(str)
