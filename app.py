@@ -1398,12 +1398,19 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
             int_cols = [c for c in target_cols if c not in rating_cols and c not in float_cols]
 
             try:
-                if rating_cols:
-                    display_data[rating_cols] = display_data[rating_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
-                if float_cols:
-                    display_data[float_cols] = display_data[float_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).round(2)
-                if int_cols:
-                    display_data[int_cols] = display_data[int_cols].apply(pd.to_numeric, errors='coerce').fillna(0).astype(int)
+                # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
+                # dictionary-based assignment loop. Applying pd.to_numeric directly to Series
+                # and assigning simultaneously prevents slow Python-level loops and memory fragmentation.
+                converted_cols = {}
+                for c in rating_cols:
+                    converted_cols[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0)
+                for c in float_cols:
+                    converted_cols[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0.0).round(2)
+                for c in int_cols:
+                    converted_cols[c] = pd.to_numeric(display_data[c], errors='coerce').fillna(0).astype(int)
+
+                if converted_cols:
+                    display_data = display_data.assign(**converted_cols)
             except Exception:
                 for c in target_cols:
                     display_data[c] = display_data[c].astype(str)
