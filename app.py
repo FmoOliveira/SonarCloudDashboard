@@ -866,7 +866,7 @@ def main():
         project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
         
         # Single consolidated info block
-        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
+        st.info(f"Showing records for project **{html.escape(project_name)}** | Branch: **{html.escape(data_branch)}**", icon="📋")
         
         display_dashboard(metrics_data, [data_project], projects, data_branch)
         
