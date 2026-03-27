@@ -128,3 +128,8 @@
 **Vulnerability:** The application read the `DATABASE_PROVIDER` configuration from user-controlled environment variables (`os.environ`) and interpolated it directly into an `st.error` UI component without escaping when an unsupported provider was provided.
 **Learning:** Even internal backend components like database factories, which read from system configuration or environment variables, can become an XSS vector if those variables are ultimately rendered on the frontend during error states.
 **Prevention:** Always use `html.escape()` to sanitize any string derived from environment variables, configuration files, or external inputs before interpolating it into Streamlit text or error components, regardless of whether `unsafe_allow_html=True` is explicitly set, to prevent markdown parsing exploits and visual spoofing.
+
+## 2026-03-13 - Streamlit Info Message XSS Vulnerability
+**Vulnerability:** Unescaped user-provided or API-fetched inputs (such as project names and branch names) were directly interpolated into Streamlit feedback messages (`st.info`) which rendered markdown, potentially allowing Markdown injection or XSS depending on parsing logic.
+**Learning:** Even built-in Streamlit informational or status messages (like `st.info`) parse Markdown and can be vulnerable to injection attacks if the rendered content includes dynamic, unsanitized user inputs.
+**Prevention:** Always sanitize dynamic content with `html.escape()` before interpolating it into Streamlit messages like `st.info()`, `st.warning()`, or `st.error()`.

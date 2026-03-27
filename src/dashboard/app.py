@@ -267,7 +267,7 @@ def main():
             data_project = st.session_state['data_project']
             data_branch = st.session_state['data_branch']
             project_name = project_names.get(data_project, data_project)
-            st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
+            st.info(f"Showing records for project **{html.escape(project_name)}** | Branch: **{html.escape(data_branch)}**", icon="📋")
             display_dashboard(metrics_data, [data_project], projects, data_branch)
         else:
             st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
