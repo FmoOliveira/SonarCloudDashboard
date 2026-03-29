@@ -843,48 +843,48 @@ def main():
                 
             if not compressed_bytes:
                 status.update(label="No data found.", state="complete", expanded=False)
-                st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
-                st.stop()
-                
-            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
-            # Store directly in Session State for instantaneous page transitions
-            st.session_state['metrics_data_parquet'] = compressed_bytes
+                st.session_state['metrics_data_parquet'] = b""
+            else:
+                status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
+                # Store directly in Session State for instantaneous page transitions
+                st.session_state['metrics_data_parquet'] = compressed_bytes
             
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
             st.toast("Data successfully loaded and compressed!", icon="✅")
         
     # Decompress only exactly when needed for the UI render
-    metrics_data = pd.DataFrame()
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
-    
-    if not metrics_data.empty:
-        # Main dashboard content
-        data_project = st.session_state.get('data_project', selected_project)
-        data_branch = st.session_state.get('data_branch', branch_filter)
-        project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
         
-        # Single consolidated info block
-        st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
-        
-        display_dashboard(metrics_data, [data_project], projects, data_branch)
-        
-        # Debug: Show data info at the bottom
-        st.markdown('---')
-        with st.expander("Debug: Data Info & Memory Footprint"):
-            st.write(f"Total records: {len(metrics_data)}")
-            st.write(f"Date range: {metrics_data['date'].min()} to {metrics_data['date'].max()}")
-            st.write(f"Unique dates: {metrics_data['date'].nunique()}")
+        if not metrics_data.empty:
+            # Main dashboard content
+            data_project = st.session_state.get('data_project', selected_project)
+            data_branch = st.session_state.get('data_branch', branch_filter)
+            project_name = next((p['name'] for p in projects if p['key'] == data_project), data_project)
             
-            byte_size = len(st.session_state.get('metrics_data_parquet', b''))
-            st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
-            st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
-            st.dataframe(metrics_data.head(), hide_index=True)
+            # Single consolidated info block
+            st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
             
-        # Explicitly delete the ephemeral uncompressed dataframe from the local scope
-        del metrics_data
-        gc.collect()
+            display_dashboard(metrics_data, [data_project], projects, data_branch)
+
+            # Debug: Show data info at the bottom
+            st.markdown('---')
+            with st.expander("Debug: Data Info & Memory Footprint"):
+                st.write(f"Total records: {len(metrics_data)}")
+                st.write(f"Date range: {metrics_data['date'].min()} to {metrics_data['date'].max()}")
+                st.write(f"Unique dates: {metrics_data['date'].nunique()}")
+
+                byte_size = len(st.session_state.get('metrics_data_parquet', b''))
+                st.markdown(f'<div style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-archive"></i> <strong>Parquet Compression Size:</strong> {byte_size / 1024:.2f} KB in Session State</div>', unsafe_allow_html=True)
+                st.caption("Data has been aggregated by date and compressed in-memory via PyArrow.")
+                st.dataframe(metrics_data.head(), hide_index=True)
+
+            # Explicitly delete the ephemeral uncompressed dataframe from the local scope
+            del metrics_data
+            gc.collect()
+        else:
+            st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:
         # Show instructions when no analysis is executed
         st.info("Select your filters in the sidebar and click **Load Dashboard** to begin analysis.", icon="👋")
