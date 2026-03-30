@@ -36,7 +36,8 @@ def get_secret(domain: str, key: str) -> str:
 def fetch_projects(_api, organization):
     """Fetch projects from SonarCloud organization"""
     try:
-        return _api.get_organization_projects(organization)
+        projects = _api.get_organization_projects(organization)
+        return projects
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
         st.error("Error fetching projects. An internal error occurred.", icon="🚨")
@@ -46,7 +47,8 @@ def fetch_projects(_api, organization):
 def fetch_project_branches(_api, project_key):
     """Fetch branches for a specific project"""
     try:
-        return _api.get_project_branches(project_key)
+        branches = _api.get_project_branches(project_key)
+        return branches
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
         st.warning("Could not fetch branches. An internal error occurred.", icon="⚠️")
@@ -147,6 +149,9 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                     stored_data = coverage_info.get("data", [])
                     if stored_data is not None and (isinstance(stored_data, pd.DataFrame) and not stored_data.empty or (isinstance(stored_data, list) and stored_data)):
                         logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
+                        if len(stored_data) >= getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000):
+                            st.warning(f"Data retrieval limit ({getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000)}) reached. Results may be truncated.", icon="⚠️")
+
                         if isinstance(stored_data, pd.DataFrame):
                             dfs_to_concat.append(stored_data)
                         else:
@@ -177,8 +182,11 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
                                 logging.info(f"Stored {len(result)} new records for {project_key}")
+                            else:
+                                st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
                         except Exception as e:
                             logging.warning(f"Could not store data for {project_key}: {str(e)}")
+                            st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
                 else:
                     try:
                         measures = _api.get_project_measures(project_key, branch)
@@ -188,9 +196,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                             df_to_store = pd.DataFrame([measures])
                             dfs_to_concat.append(df_to_store)
                             if _storage:
-                                _storage.store_metrics_data(df_to_store, project_key, branch)
+                                success = _storage.store_metrics_data(df_to_store, project_key, branch)
+                                if not success:
+                                    st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
                     except Exception as e:
                         logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
+                        st.error("Fallback fetch failed. An internal error occurred.", icon="🚨")
     
     df = pd.concat(dfs_to_concat, ignore_index=True) if dfs_to_concat else pd.DataFrame()
     

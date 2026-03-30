@@ -617,5 +617,10 @@ def decompress_from_parquet(parquet_bytes: bytes) -> pd.DataFrame:
     if not parquet_bytes:
         return pd.DataFrame()
         
-    buffer = io.BytesIO(parquet_bytes)
-    return pd.read_parquet(buffer, engine='pyarrow')
+    try:
+        buffer = io.BytesIO(parquet_bytes)
+        return pd.read_parquet(buffer, engine='pyarrow')
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to decompress Parquet data: {str(e)}")
+        return pd.DataFrame()

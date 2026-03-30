@@ -10,13 +10,13 @@ from dashboard_components import (
 )
 
 def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
-    if metric_col not in earliest_vals.columns or project_count == 0:
+    if earliest_vals is None or earliest_vals.empty or latest_vals is None or latest_vals.empty or metric_col not in earliest_vals.columns or project_count == 0:
         return ("0.0%" if is_percent else "0", None, "#888888")
     
     earliest_total = float(earliest_vals[metric_col].sum())
     latest_total = float(latest_vals[metric_col].sum())
     
-    is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating']
+    is_avg_metric = metric_col in ['duplicated_lines_density', 'security_rating', 'reliability_rating', 'coverage', 'sqale_rating', 'security_review_rating']
     
     if is_avg_metric and project_count > 0:
         latest_val = latest_total / project_count

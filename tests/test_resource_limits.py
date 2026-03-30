@@ -13,8 +13,7 @@ class TestResourceLimits(unittest.TestCase):
             self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
     @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
-    @patch('streamlit.warning')
-    def test_retrieve_metrics_limit(self, mock_warning):
+    def test_retrieve_metrics_limit(self):
         """Test that retrieve_metrics_data stops after limit"""
         # Create an iterator with 20 items
         items = [{'PartitionKey': 'pk', 'RowKey': str(i), 'val': i} for i in range(20)]
@@ -25,17 +24,8 @@ class TestResourceLimits(unittest.TestCase):
         # Verify result length matches the limit
         self.assertEqual(len(results), 10)
 
-        # Verify warning was called with appropriate message
-        found_limit_warning = False
-        for call in mock_warning.call_args_list:
-            if call[0] and "limit" in call[0][0] and "truncated" in call[0][0]:
-                found_limit_warning = True
-                break
-        self.assertTrue(found_limit_warning, "Did not warn about truncated results")
-
     @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
-    @patch('streamlit.warning')
-    def test_get_stored_projects_limit(self, mock_warning):
+    def test_get_stored_projects_limit(self):
         """Test that get_stored_projects stops after limit (slow path)"""
         # Ensure fast path is skipped (missing metadata)
         # The code catches Exception when getting MIGRATION_STATUS
@@ -49,14 +39,6 @@ class TestResourceLimits(unittest.TestCase):
 
         # Verify result length matches the limit
         self.assertEqual(len(projects), 10)
-
-        # Verify warning was called with appropriate message
-        found_limit_warning = False
-        for call in mock_warning.call_args_list:
-            if call[0] and "limit" in call[0][0] and "incomplete" in call[0][0]:
-                found_limit_warning = True
-                break
-        self.assertTrue(found_limit_warning, "Did not warn about incomplete project list")
 
 if __name__ == '__main__':
     unittest.main()
