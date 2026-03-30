@@ -3,6 +3,11 @@ import os
 
 def load_css(file_name: str) -> None:
     """Reads a CSS file and injects it into the Streamlit DOM."""
+    # Ensure file_name contains no directory traversal characters
+    if ".." in file_name or "/" in file_name or "\\" in file_name:
+        st.error("Security Error: Invalid CSS file path.", icon="🚨")
+        return
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     full_path = os.path.join(base_dir, file_name)
     
@@ -13,7 +18,8 @@ def load_css(file_name: str) -> None:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
+        # Use a generic warning to prevent path disclosure
+        st.warning("CSS file not found.", icon="⚠️")
 
 def inject_custom_css():
     """Injects custom CSS for modern UI elements"""
