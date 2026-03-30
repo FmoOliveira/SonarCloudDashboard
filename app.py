@@ -37,11 +37,17 @@ from streamlit_cookies_manager import CookieManager
 
 def load_css(file_name: str) -> None:
     """Reads a CSS file and injects it into the Streamlit DOM."""
+    # Ensure file_name contains no directory traversal characters
+    if ".." in file_name or "/" in file_name or "\\" in file_name:
+        st.error("Security Error: Invalid CSS file path.", icon="🚨")
+        return
+
     if os.path.exists(file_name):
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     else:
-        st.warning(f"CSS file not found: {file_name}", icon="⚠️")
+        # Use a generic warning to prevent path disclosure
+        st.warning("CSS file not found.", icon="⚠️")
 # Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
