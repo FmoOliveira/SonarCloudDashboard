@@ -1,3 +1,13 @@
+:root {
+    /* Define base theme variables for maintainability */
+    --primary-color: #2563EB;
+    --primary-hover: #1D4ED8;
+    --primary-text: #FFFFFF;
+    --sidebar-btn-radius: 8px;
+    --sidebar-btn-transition: all 0.2s ease-in-out;
+    --sidebar-btn-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
 .metric-card {
     background-color: var(--card-bg, #1e1e1e);
     border: 1px solid var(--card-border, #333);
@@ -29,25 +39,25 @@
 /* UNIFY ONLY SIDEBAR BUTTONS (Dark & Light Mode) */
 /* Exclude ALL header buttons (collapse, etc) from the blue style */
 section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]) {
-    background-color: #2563EB !important;
-    color: #FFFFFF !important;
-    border: 1px solid #2563EB !important;
-    border-radius: 8px !important;
-    transition: all 0.2s ease-in-out !important;
+    background-color: var(--primary-color) !important;
+    color: var(--primary-text) !important;
+    border: 1px solid var(--primary-color) !important;
+    border-radius: var(--sidebar-btn-radius) !important;
+    transition: var(--sidebar-btn-transition) !important;
 }
 
 /* Universal white color for text and icons inside SIDEBAR buttons (excluding headers) */
 section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]) * {
-    color: #FFFFFF !important;
-    fill: #FFFFFF !important;
+    color: var(--primary-text) !important;
+    fill: var(--primary-text) !important;
     vertical-align: middle;
 }
 
 /* Consistent Hover State for SIDEBAR buttons */
 section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]):hover {
-    background-color: #1D4ED8 !important; 
-    border-color: #1D4ED8 !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+    background-color: var(--primary-hover) !important; 
+    border-color: var(--primary-hover) !important;
+    box-shadow: var(--sidebar-btn-shadow) !important;
 }
 
 /* Ensure Collapse Button is Always Visible & Transparent */

@@ -1,0 +1,58 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- C:\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: D:\PersonalGit\SonarCloudDashboard
+configfile: pytest.ini
+plugins: asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 39 items
+
+tests/test_api_security.py::TestAPISecurity::test_request_timeout PASSED [  2%]
+tests/test_app_ui.py::test_unauthenticated_view PASSED                   [  5%]
+tests/test_app_ui.py::test_demo_mode_view PASSED                         [  7%]
+tests/test_auth_flow.py::test_get_auth_url PASSED                        [ 10%]
+tests/test_auth_flow.py::test_acquire_token_by_auth_code PASSED          [ 12%]
+tests/test_auth_flow.py::test_logout PASSED                              [ 15%]
+tests/test_auth_security.py::TestAuthSecurity::test_get_auth_url_includes_state PASSED [ 17%]
+tests/test_auth_security.py::TestAuthSecurity::test_logout_clears_auth_state PASSED [ 20%]
+tests/test_azure_storage_security.py::TestAzureStorageSecurity::test_delete_project_data_query_construction PASSED [ 23%]
+tests/test_azure_storage_security.py::TestAzureStorageSecurity::test_retrieve_metrics_data_query_construction PASSED [ 25%]
+tests/test_collision_security.py::TestAzureStorageCollisionSecurity::test_delete_project_data_prevents_collision PASSED [ 28%]
+tests/test_collision_security.py::TestAzureStorageCollisionSecurity::test_retrieve_metrics_data_prevents_collision PASSED [ 30%]
+tests/test_dashboard_logic.py::test_compute_metric_stats_sum PASSED      [ 33%]
+tests/test_dashboard_logic.py::test_compute_metric_stats_avg PASSED      [ 35%]
+tests/test_dashboard_logic.py::test_compute_metric_stats_empty PASSED    [ 38%]
+tests/test_dashboard_security.py::TestDashboardSecurity::test_metric_card_delta_xss_prevention PASSED [ 41%]
+tests/test_dashboard_security.py::TestDashboardSecurity::test_metric_card_xss_prevention PASSED [ 43%]
+tests/test_data_service.py::test_get_secret_from_env PASSED              [ 46%]
+tests/test_data_service.py::test_get_secret_from_streamlit_secrets PASSED [ 48%]
+tests/test_data_service.py::test_get_secret_missing PASSED               [ 51%]
+tests/test_data_service.py::test_fetch_projects_success PASSED           [ 53%]
+tests/test_data_service.py::test_fetch_projects_error PASSED             [ 56%]
+tests/test_data_service.py::test_fetch_project_branches_success PASSED   [ 58%]
+tests/test_data_service.py::test_fetch_project_branches_error PASSED     [ 61%]
+tests/test_data_service.py::test_fetch_metrics_data_fresh PASSED         [ 64%]
+tests/test_data_service.py::test_fetch_metrics_data_cached PASSED        [ 66%]
+tests/test_dos_prevention.py::TestDoSPrevention::test_get_stored_projects_performs_scan_and_backfill_if_migration_incomplete PASSED [ 69%]
+tests/test_dos_prevention.py::TestDoSPrevention::test_get_stored_projects_uses_metadata_if_available PASSED [ 71%]
+tests/test_excessive_data_exposure.py::TestExcessiveDataExposure::test_retrieve_metrics_data_excludes_sensitive_fields PASSED [ 74%]
+tests/test_metadata_security.py::TestMetadataSecurity::test_metadata_key_collision_prevention PASSED [ 76%]
+tests/test_metadata_security.py::TestMetadataSecurity::test_store_metrics_data_uses_secure_hash PASSED [ 79%]
+tests/test_resource_limits.py::TestResourceLimits::test_get_stored_projects_limit PASSED [ 82%]
+tests/test_resource_limits.py::TestResourceLimits::test_retrieve_metrics_limit PASSED [ 84%]
+tests/test_sanitization.py::TestAzureStorageSanitization::test_delete_project_data_sanitizes_partition_key PASSED [ 87%]
+tests/test_sanitization.py::TestAzureStorageSanitization::test_partition_key_sanitizes_control_characters PASSED [ 89%]
+tests/test_sanitization.py::TestAzureStorageSanitization::test_retrieve_metrics_data_sanitizes_partition_key PASSED [ 92%]
+tests/test_sanitization.py::TestAzureStorageSanitization::test_store_metrics_data_sanitizes_partition_key PASSED [ 94%]
+tests/test_sonar_api.py::test_retry_on_rate_limit_recovers_successfully PASSED [ 97%]
+tests/test_sonar_api.py::test_fail_fast_on_deterministic_error PASSED    [100%]
+
+============================== warnings summary ===============================
+tests/test_metadata_security.py::TestMetadataSecurity::test_metadata_key_collision_prevention
+  C:\Python313\Lib\pathlib\_local.py:277: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    @property
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 39 passed, 1 warning in 6.59s ========================

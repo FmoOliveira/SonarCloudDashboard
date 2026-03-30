@@ -115,36 +115,36 @@ button[data-testid="stPopoverButton"] svg {
 
 /* Logout & Popover Buttons Fix (Force Blue Style + White Text) */
 div[data-testid="stPopoverBody"] button {
-    background-color: #2563EB !important;
-    color: #FFFFFF !important;
-    border: 1px solid #2563EB !important;
-    border-radius: 8px !important;
+    background-color: var(--primary-color) !important;
+    color: var(--primary-text) !important;
+    border: 1px solid var(--primary-color) !important;
+    border-radius: var(--sidebar-btn-radius) !important;
 }
 
 /* UNIVERSAL WHITE TEXT/ICONS FOR ALL BLUE BUTTONS */
 section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]) *,
 div[data-testid="stPopoverBody"] button *,
 div[data-testid="stDownloadButton"] button * {
-    color: #FFFFFF !important;
-    fill: #FFFFFF !important;
+    color: var(--primary-text) !important;
+    fill: var(--primary-text) !important;
 }
 
 /* Unify Download Button with Sidebar Buttons in Light Mode */
 div[data-testid="stDownloadButton"] button {
-    background-color: #2563EB !important;
-    color: #FFFFFF !important;
-    border: 1px solid #2563EB !important;
-    border-radius: 8px !important;
-    transition: all 0.2s ease-in-out !important;
+    background-color: var(--primary-color) !important;
+    color: var(--primary-text) !important;
+    border: 1px solid var(--primary-color) !important;
+    border-radius: var(--sidebar-btn-radius) !important;
+    transition: var(--sidebar-btn-transition) !important;
 }
 div[data-testid="stDownloadButton"] button * {
-    color: #FFFFFF !important;
-    fill: #FFFFFF !important;
+    color: var(--primary-text) !important;
+    fill: var(--primary-text) !important;
 }
 div[data-testid="stDownloadButton"] button:hover {
-    background-color: #1D4ED8 !important;
-    border-color: #1D4ED8 !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+    background-color: var(--primary-hover) !important;
+    border-color: var(--primary-hover) !important;
+    box-shadow: var(--sidebar-btn-shadow) !important;
 }
 
 /* Toolbar & Header Fix */
