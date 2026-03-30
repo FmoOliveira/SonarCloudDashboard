@@ -60,3 +60,7 @@
 - **Anti-Pattern Found:** The application was iterating over dataframe columns sequentially via a Python `for` loop in `display_dashboard` to apply `pd.to_numeric` and `fillna` logic to individual Pandas Series (e.g., in the Detailed Metrics table).
 - **The Fix:** Vectorized this data formatting pipeline by grouping columns by data type (`rating_cols`, `float_cols`, `int_cols`) and applying transformations simultaneously via `df[cols].apply(pd.to_numeric)`.
 - **Why it Matters:** Eliminating $O(C \times N)$ column-by-column iteration within the Streamlit render loop avoids expensive Python-level function dispatch overhead, maintaining a rapid, unblocked execution cycle.
+
+- **Anti-Pattern Found:** Iterating sequentially over columns in a Pandas DataFrame using a Python `for` loop to apply operations like `pd.to_numeric` on individual Series.
+- **The Fix:** Replaced column-by-column iterations with vectorized operations across multiple columns simultaneously, e.g., `df[cols] = df[cols].apply(pd.to_numeric)`.
+- **Why it Matters:** Python-level loops over DataFrame columns incur significant function dispatch overhead and prevent underlying C libraries from parallelizing operations. Grouping column operations and executing them simultaneously removes this O(C * N) bottleneck, speeding up DataFrame preparation and preventing UI render blocking.

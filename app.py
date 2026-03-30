@@ -1069,14 +1069,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                           'security_review_rating', 'security_hotspots_reviewed', 'code_smells', 
                           'sqale_rating', 'major_violations', 'minor_violations', 'violations']
         
-        # Identify and convert available numeric columns to numeric dtype in one loop
-        available_numeric = []
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                available_numeric.append(col)
-
+        # ⚡ Bolt Optimization: Vectorize column formatting to avoid sequential O(C * N) iteration
+        # Applying functions to multiple columns at once bypasses Python-level loops and speeds up the UI render
+        available_numeric = [col for col in numeric_columns if col in df.columns]
         if available_numeric:
+            df[available_numeric] = df[available_numeric].apply(pd.to_numeric, errors='coerce')
+
             # Create aggregation dict - use mean for numeric columns
             agg_dict = {col: 'mean' for col in available_numeric}
             
