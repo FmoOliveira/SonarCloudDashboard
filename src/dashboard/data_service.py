@@ -218,7 +218,11 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
         # Applying functions to multiple columns at once bypasses Python-level loops and speeds up the UI render
         available_numeric = [col for col in numeric_columns if col in df.columns]
         if available_numeric:
-            df[available_numeric] = df[available_numeric].apply(pd.to_numeric, errors='coerce')
+            # ⚡ Bolt Optimization: Replace O(C * N) DataFrame.apply with a dictionary-based assignment loop.
+            # Applying pd.to_numeric directly to each Series avoids Pandas Python-level function dispatch
+            # overhead, significantly speeding up data processing during the Streamlit render loop.
+            converted = {col: pd.to_numeric(df[col], errors='coerce') for col in available_numeric}
+            df = df.assign(**converted)
 
             agg_dict = {col: 'mean' for col in available_numeric}
             other_cols = [col for col in df.columns if col not in available_numeric + ['date', 'project_key']]
