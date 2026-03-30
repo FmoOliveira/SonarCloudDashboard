@@ -1,0 +1,70 @@
+.metric-card {
+    background-color: var(--card-bg, #1e1e1e);
+    border: 1px solid var(--card-border, #333);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: var(--card-shadow, 0 4px 6px rgba(0,0,0,0.3));
+    transition: transform 0.3s ease;
+}
+.metric-card:hover {
+    transform: translateY(-5px);
+}
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 10px 0;
+}
+.metric-label {
+    font-size: 0.9rem;
+    color: var(--text-muted, #aaa);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.neon-green { color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.5); }
+.neon-orange { color: #ff9d00; text-shadow: 0 0 10px rgba(255,157,0,0.5); }
+.neon-blue { color: #00d4ff; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
+.neon-teal { color: #00f2ff; text-shadow: 0 0 10px rgba(0,242,255,0.5); }
+
+/* UNIFY ONLY SIDEBAR BUTTONS (Dark & Light Mode) */
+/* Exclude ALL header buttons (collapse, etc) from the blue style */
+section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]) {
+    background-color: #2563EB !important;
+    color: #FFFFFF !important;
+    border: 1px solid #2563EB !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+/* Universal white color for text and icons inside SIDEBAR buttons (excluding headers) */
+section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]) * {
+    color: #FFFFFF !important;
+    fill: #FFFFFF !important;
+    vertical-align: middle;
+}
+
+/* Consistent Hover State for SIDEBAR buttons */
+section[data-testid="stSidebar"] button[data-testid^="stBaseButton-"]:not([kind*="header"]):hover {
+    background-color: #1D4ED8 !important; 
+    border-color: #1D4ED8 !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Ensure Collapse Button is Always Visible & Transparent */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 9999 !important;
+}
+
+section[data-testid="stSidebar"] button[kind*="header"] {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+section[data-testid="stSidebar"] button[kind*="header"] * {
+    fill: currentColor !important;
+}
