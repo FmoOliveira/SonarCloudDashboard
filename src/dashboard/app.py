@@ -254,12 +254,20 @@ def main():
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
                 _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
                 st.session_state['metrics_data_parquet'] = b"" # simplified for demo
+                compressed_bytes = b""
             else:
-                st.session_state['metrics_data_parquet'] = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+                compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+
+            if not compressed_bytes:
+                status.update(label="No data found.", state="complete", expanded=False)
+                st.session_state['metrics_data_parquet'] = b""
+            else:
+                st.session_state['metrics_data_parquet'] = compressed_bytes
+                status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
+                st.toast("Data successfully loaded!", icon="✅")
+
             st.session_state['data_project'] = selected_project
             st.session_state['data_branch'] = branch_filter
-            status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
-            st.toast("Data successfully loaded!", icon="✅")
 
     if 'metrics_data_parquet' in st.session_state:
         metrics_data = decompress_from_parquet(st.session_state['metrics_data_parquet'])
