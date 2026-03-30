@@ -1,0 +1,169 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- C:\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: D:\PersonalGit\SonarCloudDashboard
+configfile: pytest.ini
+plugins: asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 14 items
+
+tests/test_data_service.py::test_get_secret_from_env PASSED              [  7%]
+tests/test_data_service.py::test_get_secret_from_streamlit_secrets PASSED [ 14%]
+tests/test_data_service.py::test_get_secret_missing PASSED               [ 21%]
+tests/test_data_service.py::test_fetch_projects_success PASSED           [ 28%]
+tests/test_data_service.py::test_fetch_projects_error PASSED             [ 35%]
+tests/test_data_service.py::test_fetch_project_branches_success PASSED   [ 42%]
+tests/test_data_service.py::test_fetch_project_branches_error PASSED     [ 50%]
+tests/test_data_service.py::test_fetch_metrics_data_fresh PASSED         [ 57%]
+tests/test_data_service.py::test_fetch_metrics_data_cached PASSED        [ 64%]
+tests/test_auth_flow.py::test_get_auth_url PASSED                        [ 71%]
+tests/test_auth_flow.py::test_acquire_token_by_auth_code PASSED          [ 78%]
+tests/test_auth_flow.py::test_logout PASSED                              [ 85%]
+tests/test_app_ui.py::test_unauthenticated_view FAILED                   [ 92%]
+tests/test_app_ui.py::test_demo_mode_view FAILED                         [100%]
+
+================================== FAILURES ===================================
+__________________________ test_unauthenticated_view __________________________
+
+    def test_unauthenticated_view():
+        # Force DEMO_MODE off to see login screen
+        with patch.dict(os.environ, {"DEMO_MODE": "0"}):
+            # We also need to mock secrets in the app to avoid KeyError
+            # Streamlit AppTest creates a simulated run
+            with patch("streamlit.secrets", {
+                "sonarcloud": {"api_token": "fake", "organization_key": "fake"},
+                "azure_ad": {"tenant_id": "fake", "client_id": "fake", "client_secret": "fake", "redirect_uri": "http://localhost:8501"}
+            }):
+                # Mock the cookie manager to be ready but empty
+                with patch("streamlit_cookies_manager.CookieManager") as mock_cookie_manager:
+                    mock_cookies = mock_cookie_manager.return_value
+                    mock_cookies.ready.return_value = True
+                    mock_cookies.get.return_value = None
+                    mock_cookies.__contains__.return_value = False
+    
+                    at = AppTest.from_file("src/dashboard/app.py")
+                    at.run()
+    
+>                   assert not at.exception
+E                   assert not ElementList(_list=[Exception(message='Unable to get authority configuration for https://login.microsoftonline.com/fake. Authority would typically be in a format of https://login.microsoftonline.com/your_tenant or https://tenant_name.ciamlogin.com or https://tenant_name.b2clogin.com/tenant.onmicrosoft.com/policy.  Also please double check your tenant name or GUID is correct.', stack_trace=['File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 286, in <module>\n    main()\n    ~~~~^^', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 149, in main\n    auth_url = get_auth_url(state=state)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", line 36, in get_auth_url\n    client = get_msal_client()', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils.py", line 281, in __call__\n    return self._get_or_create_cached_value(args, kwargs, spinner_message)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils...^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils.py", line 385, in _handle_cache_miss\n    computed_value = self._info.func(*func_args, **func_kwargs)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", line 28, in get_msal_client\n    return msal.ConfidentialClientApplication(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        client_id,\n        ^^^^^^^^^^\n        authority=authority,\n        ^^^^^^^^^^^^^^^^^^^^\n        client_credential=client_secret\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\application.py", line 644, in __init__\n    self.authority = Authority(\n                     ~~~~~~~~~^\n        authority_to_use,\n        ^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n        oidc_authority_url=oidc_authority,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        )\n        ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\authority.py", line 116, in __init__\n    raise ValueError(error_message)'])])
+E                    +  where ElementList(_list=[Exception(message='Unable to get authority configuration for https://login.microsoftonline.com/fake. Authority would typically be in a format of https://login.microsoftonline.com/your_tenant or https://tenant_name.ciamlogin.com or https://tenant_name.b2clogin.com/tenant.onmicrosoft.com/policy.  Also please double check your tenant name or GUID is correct.', stack_trace=['File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 286, in <module>\n    main()\n    ~~~~^^', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 149, in main\n    auth_url = get_auth_url(state=state)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", line 36, in get_auth_url\n    client = get_msal_client()', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils.py", line 281, in __call__\n    return self._get_or_create_cached_value(args, kwargs, spinner_message)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils...^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\streamlit\\runtime\\caching\\cache_utils.py", line 385, in _handle_cache_miss\n    computed_value = self._info.func(*func_args, **func_kwargs)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", line 28, in get_msal_client\n    return msal.ConfidentialClientApplication(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        client_id,\n        ^^^^^^^^^^\n        authority=authority,\n        ^^^^^^^^^^^^^^^^^^^^\n        client_credential=client_secret\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\application.py", line 644, in __init__\n    self.authority = Authority(\n                     ~~~~~~~~~^\n        authority_to_use,\n        ^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n        oidc_authority_url=oidc_authority,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        )\n        ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\authority.py", line 116, in __init__\n    raise ValueError(error_message)'])]) = AppTest(\n    _script_path='src\\dashboard\\app.py',\n    default_timeout=3,\n    session_state={$$STREAMLIT_INTERNAL_KEY_TESTING: {}, $$STREAMLIT_INTERNAL_KEY_SCRIPT_RUN_WITHOUT_ERRORS: False, theme_toggle: False},\n    _tree={\n        0: SpecialBlock(\n            type='main',\n            children={\n                0: Markdown(allow_html=True),\n                1: Markdown(allow_html=True),\n                2: Markdown(allow_html=True),\n                3: Markdown(allow_html=True),\n                4: Exception(message='Unable to get authority configuration for https://login.microsoftonline.com/fake. Authority would typically be in a format of https://login.microsoftonline.com/your_tenant or https://tenant_name.ciamlogin.com or https://tenant_name.b2clogin.com/tenant.onmicrosoft.com/policy.  Also please double check your tenant name or GUID is correct.', stack_trace=['File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 286, in <module>\n    main()\n    ~~~~^^', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\app.py", line 149, in main\n    auth_url = get_auth_url(state=state)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", lin...s.py", line 385, in _handle_cache_miss\n    computed_value = self._info.func(*func_args, **func_kwargs)', 'File "D:\\PersonalGit\\SonarCloudDashboard\\src\\dashboard\\auth.py", line 28, in get_msal_client\n    return msal.ConfidentialClientApplication(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        client_id,\n        ^^^^^^^^^^\n        authority=authority,\n        ^^^^^^^^^^^^^^^^^^^^\n        client_credential=client_secret\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\application.py", line 644, in __init__\n    self.authority = Authority(\n                     ~~~~~~~~~^\n        authority_to_use,\n        ^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n        oidc_authority_url=oidc_authority,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        )\n        ^', 'File "C:\\Users\\fmoliveira\\AppData\\Roaming\\Python\\Python313\\site-packages\\msal\\authority.py", line 116, in __init__\n    raise ValueError(error_message)'])\n            }\n        ),\n        1: SpecialBlock(\n            type='sidebar'\n        ),\n        2: SpecialBlock(\n            type='event'\n        )\n    }\n).exception
+
+tests\test_app_ui.py:25: AssertionError
+---------------------------- Captured stderr call -----------------------------
+2026-03-30 15:28:21.460 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:28:21.485 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:28:21.540 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\pytest\__main__.py [ARGUMENTS]
+2026-03-30 15:28:21.540 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:28:21.541 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:28:21.541 
+`st.cache` is deprecated and will be removed soon. Please use one of Streamlit's new
+caching commands, `st.cache_data` or `st.cache_resource`. More information
+[in our docs](https://docs.streamlit.io/develop/concepts/architecture/caching).
+
+**Note**: The behavior of `st.cache` was updated in Streamlit 1.36 to the new caching
+logic used by `st.cache_data` and `st.cache_resource`. This might lead to some problems
+or unexpected behavior in certain edge cases.
+
+2026-03-30 15:28:21.541 No runtime found, using MemoryCacheStorageManager
+2026-03-30 15:28:21.542 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:28:24.395 Uncaught app execution
+Traceback (most recent call last):
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\msal\authority.py", line 100, in __init__
+    openid_config = tenant_discovery(
+        tenant_discovery_endpoint,
+        self._http_client)
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\msal\authority.py", line 300, in tenant_discovery
+    raise ValueError("OIDC Discovery failed on {}. HTTP status: {}, Error: {}".format(
+    ...<3 lines>...
+        ))
+ValueError: OIDC Discovery failed on https://login.microsoftonline.com/fake/v2.0/.well-known/openid-configuration. HTTP status: 400, Error: {"error":"invalid_tenant","error_description":"AADSTS90002: Tenant 'fake' not found. Check to make sure you have the correct tenant ID and are signing into the correct cloud. Check with your subscription administrator, this may happen if there are no active subscriptions for the tenant. Trace ID: ab7ee817-49bb-4e7a-811c-5f40922b6900 Correlation ID: f5f598ce-dad6-4d56-97a4-96fbbc5eff02 Timestamp: 2026-03-30 14:28:24Z","error_codes":[90002],"timestamp":"2026-03-30 14:28:24Z","trace_id":"ab7ee817-49bb-4e7a-811c-5f40922b6900","correlation_id":"f5f598ce-dad6-4d56-97a4-96fbbc5eff02","error_uri":"https://login.microsoftonline.com/error?code=90002"}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit\runtime\scriptrunner\exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit\runtime\scriptrunner\script_runner.py", line 689, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PersonalGit\SonarCloudDashboard\src\dashboard\app.py", line 286, in <module>
+    main()
+    ~~~~^^
+  File "D:\PersonalGit\SonarCloudDashboard\src\dashboard\app.py", line 149, in main
+    auth_url = get_auth_url(state=state)
+  File "D:\PersonalGit\SonarCloudDashboard\src\dashboard\auth.py", line 36, in get_auth_url
+    client = get_msal_client()
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit\runtime\caching\cache_utils.py", line 281, in __call__
+    return self._get_or_create_cached_value(args, kwargs, spinner_message)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit\runtime\caching\cache_utils.py", line 326, in _get_or_create_cached_value
+    return self._handle_cache_miss(cache, value_key, func_args, func_kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\streamlit\runtime\caching\cache_utils.py", line 385, in _handle_cache_miss
+    computed_value = self._info.func(*func_args, **func_kwargs)
+  File "D:\PersonalGit\SonarCloudDashboard\src\dashboard\auth.py", line 28, in get_msal_client
+    return msal.ConfidentialClientApplication(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        client_id,
+        ^^^^^^^^^^
+        authority=authority,
+        ^^^^^^^^^^^^^^^^^^^^
+        client_credential=client_secret
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\msal\application.py", line 644, in __init__
+    self.authority = Authority(
+                     ~~~~~~~~~^
+        authority_to_use,
+        ^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        oidc_authority_url=oidc_authority,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+  File "C:\Users\fmoliveira\AppData\Roaming\Python\Python313\site-packages\msal\authority.py", line 116, in __init__
+    raise ValueError(error_message)
+ValueError: Unable to get authority configuration for https://login.microsoftonline.com/fake. Authority would typically be in a format of https://login.microsoftonline.com/your_tenant or https://tenant_name.ciamlogin.com or https://tenant_name.b2clogin.com/tenant.onmicrosoft.com/policy.  Also please double check your tenant name or GUID is correct.
+_____________________________ test_demo_mode_view _____________________________
+
+    def test_demo_mode_view():
+        with patch.dict(os.environ, {"DEMO_MODE": "1"}, clear=True):
+            with patch("streamlit_cookies_manager.CookieManager") as mock_cookie_manager:
+                mock_cookies = mock_cookie_manager.return_value
+                mock_cookies.ready.return_value = True
+                mock_cookies.get.return_value = None
+    
+                at = AppTest.from_file("src/dashboard/app.py")
+                at.run()
+    
+                assert not at.exception
+                # In demo mode, it bypasses auth and shows Demo User
+                assert any("Demo User" in str(item.value) for item in at.markdown if item.value)
+    
+                # Sidebar should load demo project
+                assert len(at.sidebar.selectbox) >= 1
+                project_box = at.sidebar.selectbox[0]
+>               assert "demo-project-alpha" in project_box.options
+E               AssertionError: assert 'demo-project-alpha' in ['Frontend Web Application']
+E                +  where ['Frontend Web Application'] = Selectbox(_value=InitialValue(), label='Project', options=['Frontend Web Application'], help='Select a repository to view its metrics.').options
+
+tests\test_app_ui.py:47: AssertionError
+---------------------------- Captured stderr call -----------------------------
+2026-03-30 15:28:24.412 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+============================== warnings summary ===============================
+tests/test_app_ui.py::test_demo_mode_view
+  C:\Python313\Lib\re\_parser.py:175: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    def append(self, code):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_app_ui.py::test_unauthenticated_view - assert not ElementLi...
+FAILED tests/test_app_ui.py::test_demo_mode_view - AssertionError: assert 'de...
+=================== 2 failed, 12 passed, 1 warning in 5.11s ===================

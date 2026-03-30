@@ -1,0 +1,161 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- C:\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: D:\PersonalGit\SonarCloudDashboard
+configfile: pytest.ini
+plugins: asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 14 items
+
+tests/test_data_service.py::test_get_secret_from_env PASSED              [  7%]
+tests/test_data_service.py::test_get_secret_from_streamlit_secrets PASSED [ 14%]
+tests/test_data_service.py::test_get_secret_missing PASSED               [ 21%]
+tests/test_data_service.py::test_fetch_projects_success PASSED           [ 28%]
+tests/test_data_service.py::test_fetch_projects_error FAILED             [ 35%]
+tests/test_data_service.py::test_fetch_project_branches_success PASSED   [ 42%]
+tests/test_data_service.py::test_fetch_project_branches_error FAILED     [ 50%]
+tests/test_data_service.py::test_fetch_metrics_data_fresh PASSED         [ 57%]
+tests/test_data_service.py::test_fetch_metrics_data_cached FAILED        [ 64%]
+tests/test_auth_flow.py::test_get_auth_url PASSED                        [ 71%]
+tests/test_auth_flow.py::test_acquire_token_by_auth_code PASSED          [ 78%]
+tests/test_auth_flow.py::test_logout PASSED                              [ 85%]
+tests/test_app_ui.py::test_unauthenticated_view FAILED                   [ 92%]
+tests/test_app_ui.py::test_demo_mode_view FAILED                         [100%]
+
+================================== FAILURES ===================================
+__________________________ test_fetch_projects_error __________________________
+
+mock_error = <MagicMock name='error' id='2582280482032'>
+
+    @patch("data_service.st.error")
+    def test_fetch_projects_error(mock_error):
+        api = MagicMock()
+        api.get_organization_projects.side_effect = Exception("API failure")
+        projects = fetch_projects(api, "my-org")
+>       assert projects == []
+E       AssertionError: assert [{'key': 'pro... 'Project 2'}] == []
+E         
+E         Left contains 2 more items, first extra item: {'key': 'proj1', 'name': 'Project 1'}
+E         
+E         Full diff:
+E         - []
+E         + [
+E         +     {...
+E         
+E         ...Full output truncated (8 lines hidden), use '-vv' to show
+
+tests\test_data_service.py:40: AssertionError
+______________________ test_fetch_project_branches_error ______________________
+
+mock_warning = <MagicMock name='warning' id='2582280483376'>
+
+    @patch("data_service.st.warning")
+    def test_fetch_project_branches_error(mock_warning):
+        api = MagicMock()
+        api.get_project_branches.side_effect = Exception("API failure")
+        branches = fetch_project_branches(api, "proj1")
+>       assert branches == []
+E       AssertionError: assert [{'isMain': T...': 'develop'}] == []
+E         
+E         Left contains 2 more items, first extra item: {'isMain': True, 'name': 'main'}
+E         
+E         Full diff:
+E         - []
+E         + [
+E         +     {...
+E         
+E         ...Full output truncated (8 lines hidden), use '-vv' to show
+
+tests\test_data_service.py:54: AssertionError
+_______________________ test_fetch_metrics_data_cached ________________________
+
+mock_compress = <MagicMock name='compress_to_parquet' id='2582282079264'>
+mock_sonarcloud_api = <MagicMock id='2582280480016'>
+mock_storage_client = <MagicMock id='2582282078592'>
+
+    @patch("data_service.compress_to_parquet")
+    def test_fetch_metrics_data_cached(mock_compress, mock_sonarcloud_api, mock_storage_client):
+        import pandas as pd
+        # Ensure it uses cached data
+        mock_storage_client.check_data_coverage.return_value = {
+            "has_coverage": True,
+            "latest_date": "2023-10-01",
+            "data": pd.DataFrame([{"date": "2023-10-01", "project_key": "proj1", "coverage": 90.0, "bugs": 1}])
+        }
+        mock_compress.return_value = b"cached-parquet-bytes"
+    
+        result = fetch_metrics_data(mock_sonarcloud_api, ["proj1"], 30, "main", _storage=mock_storage_client)
+>       assert result == b"cached-parquet-bytes"
+E       AssertionError: assert b'fake-parquet-bytes' == b'cached-parquet-bytes'
+E         
+E         At index 0 diff: b'f' != b'c'
+E         
+E         Full diff:
+E         - (b'cached-parquet-bytes')
+E         ?    ^ ^^ -
+E         + (b'fake-parquet-bytes')
+E         ?    ^ ^
+
+tests\test_data_service.py:91: AssertionError
+__________________________ test_unauthenticated_view __________________________
+
+    def test_unauthenticated_view():
+        # Force DEMO_MODE off to see login screen
+        with patch.dict(os.environ, {"DEMO_MODE": "0"}):
+            # We also need to mock secrets in the app to avoid KeyError
+            # Streamlit AppTest creates a simulated run
+            with patch("streamlit.secrets", {
+                "sonarcloud": {"api_token": "fake", "organization_key": "fake"},
+                "azure_ad": {"tenant_id": "fake", "client_id": "fake", "client_secret": "fake", "redirect_uri": "http://localhost:8501"}
+            }):
+                # Mock the cookie manager to be ready but empty
+                with patch("app.CookieManager") as mock_cookie_manager:
+                    mock_cookies = mock_cookie_manager.return_value
+                    mock_cookies.ready.return_value = True
+                    mock_cookies.get.return_value = None
+                    mock_cookies.__contains__.return_value = False
+    
+                    at = AppTest.from_file("src/dashboard/app.py")
+                    at.run()
+    
+                    assert not at.exception
+                    # Without auth, 'render_login_page' creates a link to login
+                    # Check for SonarCloud Dashboard title is present
+>                   assert any("SonarCloud Dashboard" in item.value for item in at.markdown)
+E                   assert False
+E                    +  where False = any(<generator object test_unauthenticated_view.<locals>.<genexpr> at 0x000002593C08AB50>)
+
+tests\test_app_ui.py:28: AssertionError
+---------------------------- Captured stderr call -----------------------------
+2026-03-30 15:23:37.658 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:23:37.682 No runtime found, using MemoryCacheStorageManager
+2026-03-30 15:23:37.685 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-30 15:23:37.686 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+_____________________________ test_demo_mode_view _____________________________
+
+    def test_demo_mode_view():
+        with patch.dict(os.environ, {"DEMO_MODE": "1"}, clear=True):
+            with patch("app.CookieManager") as mock_cookie_manager:
+                mock_cookies = mock_cookie_manager.return_value
+                mock_cookies.ready.return_value = True
+                mock_cookies.get.return_value = None
+    
+                at = AppTest.from_file("src/dashboard/app.py")
+                at.run()
+    
+                assert not at.exception
+                # In demo mode, it bypasses auth and shows Demo User
+>               assert any("Demo User" in str(item.value) for item in at.markdown if item.value)
+E               assert False
+E                +  where False = any(<generator object test_demo_mode_view.<locals>.<genexpr> at 0x000002593C0B9A80>)
+
+tests\test_app_ui.py:42: AssertionError
+---------------------------- Captured stderr call -----------------------------
+2026-03-30 15:23:37.735 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+=========================== short test summary info ===========================
+FAILED tests/test_data_service.py::test_fetch_projects_error - AssertionError...
+FAILED tests/test_data_service.py::test_fetch_project_branches_error - Assert...
+FAILED tests/test_data_service.py::test_fetch_metrics_data_cached - Assertion...
+FAILED tests/test_app_ui.py::test_unauthenticated_view - assert False
+FAILED tests/test_app_ui.py::test_demo_mode_view - assert False
+========================= 5 failed, 9 passed in 2.17s =========================
