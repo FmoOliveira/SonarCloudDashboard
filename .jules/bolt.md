@@ -60,3 +60,7 @@
 - **Anti-Pattern Found:** The application was iterating over dataframe columns sequentially via a Python `for` loop in `display_dashboard` to apply `pd.to_numeric` and `fillna` logic to individual Pandas Series (e.g., in the Detailed Metrics table).
 - **The Fix:** Replaced `df[cols].apply(pd.to_numeric)` with a dictionary-based assignment loop in `app.py` and `dashboard_view.py`. It iterates over columns, applies `pd.to_numeric` to each Series, and constructs a dictionary of formatted Series, before merging back via `pd.DataFrame.assign(**converted_cols)`.
 - **Why it Matters:** This eliminates Python-level function dispatch overhead inherently caused by Pandas `.apply` when transforming multiple columns, and prevents intermediate DataFrame memory fragmentation, leading to faster data formatting within the Streamlit render loop.
+
+- **Anti-Pattern Found:** Utilizing `df[cols].apply(pd.to_numeric)` to convert multiple dataframe columns sequentially. This introduces Python-level function dispatch overhead inherently caused by Pandas `.apply` and slows down the data formatting step during the Streamlit render loop.
+- **The Fix:** Replaced `df[cols].apply(pd.to_numeric)` with dictionary-based assignment (`converted = {col: pd.to_numeric(df[col])}; df = df.assign(**converted)`).
+- **Why it Matters:** This eliminates Python-level function dispatch overhead when transforming multiple columns, and prevents intermediate DataFrame memory fragmentation, leading to faster data formatting within the Streamlit render loop.
