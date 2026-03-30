@@ -277,6 +277,10 @@ def main():
             project_name = project_names.get(data_project, data_project)
             st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
             display_dashboard(metrics_data, [data_project], projects, data_branch)
+
+            # ⚡ Bolt Optimization: Safely delete the massive DataFrame and force GC
+            del metrics_data
+            gc.collect()
         else:
             st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:
