@@ -849,15 +849,16 @@ def main():
                 
             if not compressed_bytes:
                 status.update(label="No data found.", state="complete", expanded=False)
+                st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
                 st.session_state['metrics_data_parquet'] = b""
             else:
                 status.update(label="Telemetry loaded successfully!", state="complete", expanded=False)
                 # Store directly in Session State for instantaneous page transitions
                 st.session_state['metrics_data_parquet'] = compressed_bytes
-            
-            st.session_state['data_project'] = selected_project
-            st.session_state['data_branch'] = branch_filter
-            st.toast("Data successfully loaded and compressed!", icon="✅")
+                
+                st.session_state['data_project'] = selected_project
+                st.session_state['data_branch'] = branch_filter
+                st.toast("Data successfully loaded and compressed!", icon="✅")
         
     # Decompress only exactly when needed for the UI render
     if 'metrics_data_parquet' in st.session_state:
