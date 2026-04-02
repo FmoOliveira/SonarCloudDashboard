@@ -3,7 +3,12 @@ import logging
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from typing import List, Dict, Optional
-import streamlit as st
+import asyncio
+import aiohttp
+from constants import SONAR_METRICS
+
+class SonarCloudAPIError(Exception): 
+    pass
 
 class SonarCloudAPI:
     """SonarCloud API client for fetching organization and project metrics"""
@@ -13,105 +18,91 @@ class SonarCloudAPI:
         self.base_url = "https://sonarcloud.io/api"
         self.session = requests.Session()
         
-        # Update to Bearer token per v2 API standard
         self.session.headers.update({'Authorization': f'Bearer {token}'})
         
-        # Configure urllib3 Retry adapter to handle HTTP 429 and 5xx errors
         retries = Retry(
             total=5,
-            backoff_factor=1, # 1s, 2s, 4s, 8s, 16s
+            backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["GET"]
         )
         self.session.mount('https://', HTTPAdapter(max_retries=retries))
         
     def _make_request(self, endpoint: str, params: Dict = None, timeout: int = 30) -> Dict:
-        """Make authenticated request to SonarCloud API"""
         url = f"{self.base_url}/{endpoint}"
-        
         try:
             response = self.session.get(url, params=params, timeout=timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"API request failed: {str(e)}")
-    
-    def get_organization_projects(self, organization: str) -> List[Dict]:
-        """Get all projects in the organization using pagination"""
-        projects = []
-        page = 1
-        page_size = 500
-        
-        try:
-            while True:
-                response = self._make_request(
-                    "projects/search",
-                    params={
-                        "organization": organization,
-                        "qualifiers": "TRK",      # Only fetch actual projects
-                        "f": "name,key",          # Optimize: Only fetch necessary fields
-                        "ps": page_size,          # Page size
-                        "p": page                 # Page number
-                    }
-                )
-                
-                components = response.get('components', [])
-                projects.extend(components)
-                
-                # Check Pagination
-                paging = response.get('paging', {})
-                total = paging.get('total', 0)
-                
-                if page * page_size >= total:
-                    break # We have fetched all projects
-                    
-                page += 1
-                
-            return projects
+            raise SonarCloudAPIError(f"API request failed: {str(e)}")
             
-        except Exception as e:
-            logging.error(f"Failed to fetch projects: {str(e)}")
-            raise e
+    async def _fetch_projects_page(self, session, url, params) -> Dict:
+        async with session.get(url, params=params) as response:
+            if response.status == 200:
+                return await response.json()
+            raise SonarCloudAPIError(f"Async API request failed with status {response.status}")
+
+    async def _get_organization_projects_async(self, organization: str) -> List[Dict]:
+        projects = []
+        page_size = 500
+        url = f"{self.base_url}/projects/search"
+        params = {"organization": organization, "qualifiers": "TRK", "f": "name,key", "ps": page_size, "p": 1}
+        headers = {'Authorization': f'Bearer {self.token}'}
+        
+        async with aiohttp.ClientSession(headers=headers) as session:
+            try:
+                first_page = await self._fetch_projects_page(session, url, params)
+                projects.extend(first_page.get('components', []))
+                
+                total = first_page.get('paging', {}).get('total', 0)
+                if total > page_size:
+                    tasks = []
+                    total_pages = (total + page_size - 1) // page_size
+                    for page in range(2, total_pages + 1):
+                        p = params.copy()
+                        p['p'] = page
+                        tasks.append(self._fetch_projects_page(session, url, p))
+                    
+                    if tasks:
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                        for r in results:
+                            if isinstance(r, Exception):
+                                logging.error(f"Failed to fetch projects page: {r}")
+                            else:
+                                projects.extend(r.get('components', []))
+            except Exception as e:
+                logging.error(f"Failed to fetch initial projects: {e}")
+                raise SonarCloudAPIError(f"Error fetching projects: {e}")
+                
+        return projects
+
+    def get_organization_projects(self, organization: str) -> List[Dict]:
+        """Get all projects in the organization using concurrent asynchronous fetching"""
+        # If there's an existing loop, use it; otherwise create a new one via run()
+        try:
+            loop = asyncio.get_running_loop()
+            return loop.run_until_complete(self._get_organization_projects_async(organization))
+        except RuntimeError:
+            return asyncio.run(self._get_organization_projects_async(organization))
     
     def get_project_measures(self, project_key: str, branch: str = None) -> Optional[Dict]:
-        """Get current measures for a project"""
-        metrics = [
-            'coverage',
-            'duplicated_lines_density',
-            'bugs',
-            'reliability_rating',
-            'vulnerabilities',
-            'security_rating',
-            'security_hotspots',
-            'security_review_rating',
-            'security_hotspots_reviewed',
-            'code_smells',
-            'sqale_rating',
-            'major_violations',
-            'minor_violations',
-            'violations'
-        ]
-        
         try:
             params = {
                 "component": project_key,
-                "metricKeys": ",".join(metrics)
+                "metricKeys": ",".join(SONAR_METRICS)
             }
-            
-            # Add branch parameter if specified
             if branch and branch.strip():
                 params["branch"] = branch.strip()
             
             response = self._make_request("measures/component", params=params)
             
-            # Parse measures into a dictionary
             measures = {}
             if 'component' in response and 'measures' in response['component']:
                 for measure in response['component']['measures']:
                     metric = measure['metric']
                     value = measure.get('value', '0')
                     
-                    # Convert to appropriate type
                     if metric in ['coverage', 'duplicated_lines_density']:
                         try:
                             measures[metric] = float(value)
@@ -130,32 +121,12 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.warning(f"Failed to fetch measures for {project_key}: {str(e)}")
-            return None
+            raise SonarCloudAPIError(f"Failed to fetch measures: {e}")
     
     def get_project_history(self, project_key: str, days: int, branch: str = None) -> List[Dict]:
-        """Get historical measures for a project using pagination"""
         from datetime import datetime, timedelta
-        
-        # Calculate date range
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
-        
-        metrics = [
-            'coverage',
-            'duplicated_lines_density',
-            'bugs',
-            'reliability_rating',
-            'vulnerabilities',
-            'security_rating',
-            'security_hotspots',
-            'security_review_rating',
-            'security_hotspots_reviewed',
-            'code_smells',
-            'sqale_rating',
-            'major_violations',
-            'minor_violations',
-            'violations'
-        ]
         
         try:
             history_data = {}
@@ -165,14 +136,13 @@ class SonarCloudAPI:
             while True:
                 params = {
                     "component": project_key,
-                    "metrics": ",".join(metrics),
+                    "metrics": ",".join(SONAR_METRICS),
                     "from": start_date.strftime('%Y-%m-%d'),
                     "to": end_date.strftime('%Y-%m-%d'),
                     "ps": page_size,
                     "p": page
                 }
                 
-                # Add branch parameter if specified
                 if branch and branch.strip():
                     params["branch"] = branch.strip()
                 
@@ -188,7 +158,6 @@ class SonarCloudAPI:
                             if date not in history_data:
                                 history_data[date] = {'date': date}
                             
-                            # Convert to appropriate type
                             if metric in ['coverage', 'duplicated_lines_density', 'security_hotspots_reviewed']:
                                 try:
                                     history_data[date][metric] = float(value)
@@ -204,7 +173,6 @@ class SonarCloudAPI:
                             else:
                                 history_data[date][metric] = value
                 
-                # Check pagination bounds
                 paging = response.get('paging', {})
                 total = paging.get('total', 0)
                 
@@ -217,10 +185,9 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.warning(f"Failed to fetch history for {project_key}: {str(e)}")
-            return []
+            raise SonarCloudAPIError(f"Failed to fetch history: {e}")
     
     def get_organization_metrics(self, organization: str) -> Dict:
-        """Get organization-level metrics summary"""
         try:
             projects = self.get_organization_projects(organization)
             
@@ -255,10 +222,9 @@ class SonarCloudAPI:
             
         except Exception as e:
             logging.error(f"Failed to fetch organization metrics: {str(e)}")
-            return {}
+            raise SonarCloudAPIError(f"Failed to fetch organization metrics: {e}")
     
     def get_project_branches(self, project_key: str) -> List[Dict]:
-        """Get all branches for a project"""
         try:
             response = self._make_request(
                 "project_branches/list",
@@ -267,4 +233,4 @@ class SonarCloudAPI:
             return response.get('branches', [])
         except Exception as e:
             logging.warning(f"Failed to fetch branches for {project_key}: {str(e)}")
-            raise e
+            raise SonarCloudAPIError(f"Failed to fetch branches: {e}")

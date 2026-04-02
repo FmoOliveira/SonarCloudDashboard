@@ -1,4 +1,3 @@
-import streamlit as st
 import pandas as pd
 import asyncio
 import aiohttp
@@ -8,12 +7,13 @@ from datetime import datetime, timedelta
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import compress_to_parquet
+import streamlit as st
+from constants import SONAR_METRICS
+
+class ConfigurationError(Exception): pass
+class DataServiceError(Exception): pass
 
 def get_secret(domain: str, key: str) -> str:
-    """
-    Safely extracts secrets checking OS environment variables first, 
-    enforcing strict validation before downstream API calls occur.
-    """
     env_name = f"{domain.upper()}_{key.upper()}"
     if env_name in os.environ:
         return os.environ[env_name]
@@ -22,36 +22,28 @@ def get_secret(domain: str, key: str) -> str:
         return st.secrets[domain][key]
     except FileNotFoundError:
         logging.error("Security Configuration Error: `secrets.toml` is missing.")
-        st.error("Security Configuration Error: A required configuration file is missing.", icon="🚨")
-        st.stop()
-        return ""
+        raise ConfigurationError("A required configuration file is missing.")
     except KeyError:
         error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
         logging.critical(error_msg)
-        st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
-        st.stop()
-        return ""
+        raise ConfigurationError("A required configuration key is missing.")
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)
 def fetch_projects(_api, organization):
-    """Fetch projects from SonarCloud organization"""
     try:
         projects = _api.get_organization_projects(organization)
         return projects
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
-        st.error("Error fetching projects. An internal error occurred.", icon="🚨")
-        return []
+        raise DataServiceError("Error fetching projects. An internal error occurred.")
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)
 def fetch_project_branches(_api, project_key):
-    """Fetch branches for a specific project"""
     try:
         branches = _api.get_project_branches(project_key)
         return branches
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
-        st.warning("Could not fetch branches. An internal error occurred.", icon="⚠️")
         return []
 
 def should_retry_api_call(exc: BaseException) -> bool:
@@ -72,15 +64,9 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
     
-    metrics = [
-        'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
-        'vulnerabilities', 'security_rating', 'security_hotspots', 'security_review_rating',
-        'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations',
-        'minor_violations', 'violations'
-    ]
     params: dict[str, str | int] = {
         "component": project_key,
-        "metrics": ",".join(metrics),
+        "metrics": ",".join(SONAR_METRICS),
         "from": start_date.strftime('%Y-%m-%d'),
         "to": end_date.strftime('%Y-%m-%d'),
         "ps": 1000
@@ -95,9 +81,6 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        # ⚡ Bolt Optimization: Replaced O(N^2) list lookup `next((r for r in history...))`
-        # with an O(1) dictionary lookup keyed by date. This prevents blocking the asyncio
-        # event loop when processing thousands of historical data points per project.
         history_dict = {}
         if 'measures' in data:
             for measure in data['measures']:
@@ -131,10 +114,6 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
-    """Fetch historical metrics data using async endpoints and compress to Parquet bytes for caching"""
-    # ⚡ Bolt Optimization: Use a list of DataFrames to concat directly instead of
-    # converting back and forth to native Python dictionaries (e.g. `to_dict('records')`).
-    # This avoids an O(N) memory allocation and execution bottleneck during Streamlit reruns.
     dfs_to_concat = []
     projects_to_fetch = []
     
@@ -150,7 +129,7 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                     if stored_data is not None and (isinstance(stored_data, pd.DataFrame) and not stored_data.empty or (isinstance(stored_data, list) and stored_data)):
                         logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
                         if len(stored_data) >= getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000):
-                            st.warning(f"Data retrieval limit ({getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000)}) reached. Results may be truncated.", icon="⚠️")
+                            logging.warning(f"Data retrieval limit ({getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000)}) reached.")
 
                         if isinstance(stored_data, pd.DataFrame):
                             dfs_to_concat.append(stored_data)
@@ -168,7 +147,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
     
     if projects_to_fetch:
         token = get_secret("sonarcloud", "api_token")
-        raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
+        
+        try:
+            loop = asyncio.get_running_loop()
+            raw_results = loop.run_until_complete(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
+        except RuntimeError:
+            raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
         
         for project_key, result in raw_results.items():
             if isinstance(result, Exception):
@@ -183,10 +167,9 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                             if success:
                                 logging.info(f"Stored {len(result)} new records for {project_key}")
                             else:
-                                st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
+                                logging.error("Failed to store metrics data internally.")
                         except Exception as e:
                             logging.warning(f"Could not store data for {project_key}: {str(e)}")
-                            st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
                 else:
                     try:
                         measures = _api.get_project_measures(project_key, branch)
@@ -197,11 +180,8 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                             dfs_to_concat.append(df_to_store)
                             if _storage:
                                 success = _storage.store_metrics_data(df_to_store, project_key, branch)
-                                if not success:
-                                    st.error("Failed to store metrics data. An internal error occurred.", icon="🚨")
                     except Exception as e:
                         logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
-                        st.error("Fallback fetch failed. An internal error occurred.", icon="🚨")
     
     df = pd.concat(dfs_to_concat, ignore_index=True) if dfs_to_concat else pd.DataFrame()
     
@@ -209,18 +189,8 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
         df['date'] = df['date'].dt.tz_convert(None)
         
-        numeric_columns = ['coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating',
-                          'vulnerabilities', 'security_rating', 'security_hotspots', 
-                          'security_review_rating', 'security_hotspots_reviewed', 'code_smells', 
-                          'sqale_rating', 'major_violations', 'minor_violations', 'violations']
-        
-        # ⚡ Bolt Optimization: Vectorize column formatting to avoid sequential O(C * N) iteration
-        # Applying functions to multiple columns at once bypasses Python-level loops and speeds up the UI render
-        available_numeric = [col for col in numeric_columns if col in df.columns]
+        available_numeric = [col for col in SONAR_METRICS if col in df.columns]
         if available_numeric:
-            # ⚡ Bolt Optimization: Replace O(C * N) DataFrame.apply with a dictionary-based assignment loop.
-            # Applying pd.to_numeric directly to each Series avoids Pandas Python-level function dispatch
-            # overhead, significantly speeding up data processing during the Streamlit render loop.
             converted = {col: pd.to_numeric(df[col], errors='coerce') for col in available_numeric}
             df = df.assign(**converted)
 

@@ -13,57 +13,29 @@ import logging
 import pandas as pd
 import html
 import os
-import secrets
 import gc
 import sys
-from datetime import datetime, timedelta
 from streamlit_cookies_manager import CookieManager
 
 from sonarcloud_api import SonarCloudAPI
 from database.factory import get_storage_client
-from auth import get_auth_url, acquire_token_by_auth_code, logout, get_user_photo
 from dashboard_components import decompress_from_parquet
 
-# New modular imports
-from data_service import (
-    get_secret, 
-    fetch_projects, 
-    fetch_project_branches, 
-    fetch_metrics_data
-)
+from data_service import fetch_projects, fetch_metrics_data
 from dashboard_view import display_dashboard, render_login_page
-from ui_styles import (
-    load_css, 
-    inject_custom_css, 
-    apply_theme_overrides, 
-    render_theme_toggle
-)
+from ui_styles import load_css, inject_custom_css, apply_theme_overrides, render_theme_toggle
+from sidebar_controller import render_sidebar
+from auth_controller import handle_auth, get_user_info, get_login_url
 
-# Page configuration
 st.set_page_config(
     page_title="SonarCloud Dashboard",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-def release_memory_safely(*session_keys: str) -> None:
-    """Safely deletes large objects from the Streamlit session state and forces GC."""
-    keys_deleted = False
-    for key in session_keys:
-        if key in st.session_state:
-            del st.session_state[key]
-            keys_deleted = True
-    if keys_deleted:
-        gc.collect()
-
-def handle_project_change():
-    """Callback triggered when the user changes the project dropdown."""
-    release_memory_safely('metrics_data_parquet', 'data_project', 'data_branch', 'show_anomalies')
-    if 'metric_selector' in st.session_state:
-        st.session_state['metric_selector'] = ["vulnerabilities", "security_rating"]
-
 @st.cache_resource
 def init_sonarcloud_api():
+    from data_service import get_secret
     token = get_secret("sonarcloud", "api_token")
     return SonarCloudAPI(token)
 
@@ -83,52 +55,19 @@ def main():
     if not cookies.ready():
         st.stop()
         
-    auth_token = cookies.get("auth_token")
+    auth_token = handle_auth(cookies)
     
-    if not auth_token and "code" in st.query_params:
-        auth_code = st.query_params["code"]
-        returned_state = st.query_params.get("state")
-        st.query_params.clear()
-
-        expected_state = cookies.get("auth_state")
-        if "auth_state" in cookies:
-            del cookies["auth_state"]
-            cookies.save()
-
-        if not expected_state or returned_state != expected_state:
-            st.error("Authentication failed: State mismatch (potential CSRF).", icon="🚨")
-            st.stop()
-
-        with st.spinner("Authenticating..."):
-            token_result = acquire_token_by_auth_code(auth_code)
-
-            if "access_token" in token_result:
-                auth_token = token_result["access_token"]
-                cookies["auth_token"] = auth_token
-                user_info = token_result.get("id_token_claims", {})
-                cookies["user_info_name"] = user_info.get("name", "User")
-                photo_b64 = get_user_photo(auth_token)
-                if photo_b64:
-                    cookies["user_photo"] = photo_b64
-                cookies.save()
-            else:
-                cookies.save()
-                error_desc = token_result.get("error_description", "Unknown error")
-                if "AADSTS54005" in error_desc:
-                    st.rerun()
-                else:
-                    logging.error(f"Authentication failed: {error_desc}")
-                    st.error("Authentication failed: An internal error occurred.", icon="🚨")
-                    st.stop()
+    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
 
     if auth_token:
-        user_name = cookies.get("user_info_name") or "User"
+        user_name, raw_photo_b64 = get_user_info(cookies)
+        if not user_name: user_name = "User"
+        if not raw_photo_b64: raw_photo_b64 = ""
+        
         initials = "".join([n[0] for n in user_name.split() if n])[:2].upper() or "U"
         safe_user_name = html.escape(user_name)
         safe_initials = html.escape(initials)
 
-        # Strict URL scheme validation for images to prevent Javascript execution via XSS
-        raw_photo_b64 = cookies.get("user_photo") or ""
         if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
             raw_photo_b64 = ""
 
@@ -138,19 +77,11 @@ def main():
     else:
         st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
 
-        state = cookies.get("auth_state")
-        if not state:
-            state = secrets.token_urlsafe(32)
-            cookies["auth_state"] = state
-            cookies.save()
-
-        is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
         if not is_demo_mode:
-            auth_url = get_auth_url(state=state)
+            auth_url = get_login_url(cookies)
             with st.sidebar:
                 render_theme_toggle()
 
-            # Render prominent login page in main content area
             render_login_page(auth_url)
             st.stop()
         else:
@@ -159,104 +90,42 @@ def main():
             safe_photo_b64 = ""
             safe_popover_label = "👤 Demo User"
             
-    is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
     if is_demo_mode:
         st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
         api, storage, organization = None, None, "demo-org"
         projects = [{"key": "demo-project-alpha", "name": "Frontend Web Application"}]
     else:
-        api = init_sonarcloud_api()
-        storage = init_storage_client()
-        organization = get_secret("sonarcloud", "organization_key")
-        with st.spinner("Loading projects..."):
-            projects = fetch_projects(api, organization)
-        if not projects:
-            st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
+        try:
+            api = init_sonarcloud_api()
+            storage = init_storage_client()
+            from data_service import get_secret
+            organization = get_secret("sonarcloud", "organization_key")
+            with st.spinner("Loading projects..."):
+                projects = fetch_projects(api, organization)
+            if not projects:
+                st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
+                st.stop()
+        except Exception as e:
+            st.error(f"Failed to initialize data layer: {e}", icon="🚨")
             st.stop()
 
-    with st.sidebar:
-        with st.popover(safe_popover_label):
-            if safe_photo_b64:
-                st.markdown(f'<div style="text-align: center;"><img src="{safe_photo_b64}" style="width: 64px; height: 64px; border-radius: 50%;"></div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: #1db954; color: white; display: flex; justify-content: center; align-items: center; font-weight: 700;">{safe_initials}</div></div>', unsafe_allow_html=True)
-            
-            st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
-            
-            # Theme toggle moved inside the Profile menu
-            render_theme_toggle()
-            
-            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-            
-            if st.button("Logout", use_container_width=True, type="primary", icon=":material/logout:"):
-                logout(cookies)
-        
-        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
-        
-        # ⚡ Bolt Optimization: Map projects list to a dictionary for O(1) format_func
-        # lookup in the Streamlit render loop. The old `next(generator)` was O(M*N).
-        project_names = {p['key']: p['name'] for p in projects}
-
-        selected_project = st.selectbox(
-            "Project",
-            options=[p['key'] for p in projects],
-            format_func=lambda x: project_names.get(x, x),
-            on_change=handle_project_change,
-            help="Select a repository to view its metrics."
-        )
-        
-        if is_demo_mode:
-            branch_options = ["main"]
-        else:
-            branches = fetch_project_branches(api, selected_project)
-            branch_options = [b.get('name', 'Unknown') for b in branches]
-
-        date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
-
-        custom_days = None
-        disable_submit = False
-        if date_range == "Custom...":
-            date_vals = st.date_input(
-                "Select Date Range",
-                value=(datetime.now() - timedelta(days=30), datetime.now()),
-                max_value=datetime.now(),
-                label_visibility="collapsed",
-                format="YYYY/MM/DD",
-                help="Select the start and end dates."
-            )
-            if isinstance(date_vals, tuple) and len(date_vals) == 2:
-                start_date, end_date = date_vals
-                custom_days = (datetime.now().date() - start_date).days
-                custom_days = max(1, custom_days)
-            elif isinstance(date_vals, tuple) and len(date_vals) == 1:
-                st.info("Please select an end date to complete the range.", icon="📅")
-                disable_submit = True
-                custom_days = 30
-            else:
-                custom_days = 30
-
-        days = {"Last 7 days": 7, "Last 30 days": 30, "Last 90 days": 90, "Last year": 365}.get(date_range, custom_days if date_range == "Custom..." else 30)
-
-        with st.form(key="controls_form", border=False):
-            if branch_options:
-                branch_filter = st.selectbox("Branch", options=branch_options, help="Select a branch to analyze.")
-            else:
-                branch_filter = st.text_input("Branch", value="master", help="No branches found. Enter branch name manually.", placeholder="e.g., main, master, feature/xyz")
-            execute_analysis = st.form_submit_button("Load Dashboard", type="primary", use_container_width=True, icon=":material/analytics:", disabled=disable_submit)
-
-        if st.button("Refresh Data", use_container_width=True, icon=":material/sync:"):
-            st.cache_data.clear()
-            st.rerun()
+    selected_project, branch_filter, days, execute_analysis, project_names = render_sidebar(
+        api, is_demo_mode, projects, cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label
+    )
 
     if execute_analysis:
         with st.status("Loading telemetry...", expanded=True) as status:
             if is_demo_mode:
                 demo_path = os.path.join(os.path.dirname(__file__), "demo", "demo_metrics.parquet")
                 _ = pd.read_parquet(demo_path) if os.path.exists(demo_path) else pd.DataFrame()
-                st.session_state['metrics_data_parquet'] = b"" # simplified for demo
+                st.session_state['metrics_data_parquet'] = b"" 
                 compressed_bytes = b""
             else:
-                compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+                try:
+                    compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+                except Exception as e:
+                    st.error(f"Error fetching metrics: {e}", icon="🚨")
+                    compressed_bytes = b""
 
             if not compressed_bytes:
                 status.update(label="No data found.", state="complete", expanded=False)
@@ -278,7 +147,6 @@ def main():
             st.info(f"Showing records for project **{project_name}** | Branch: **{data_branch}**", icon="📋")
             display_dashboard(metrics_data, [data_project], projects, data_branch)
 
-            # ⚡ Bolt Optimization: Safely delete the massive DataFrame and force GC
             del metrics_data
             gc.collect()
         else:

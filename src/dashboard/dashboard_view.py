@@ -145,13 +145,8 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
     
-    ALL_METRICS = [
-        'coverage', 'duplicated_lines_density', 'bugs', 'reliability_rating', 
-        'vulnerabilities', 'security_rating', 'security_hotspots', 'security_review_rating', 
-        'security_hotspots_reviewed', 'code_smells', 'sqale_rating', 'major_violations', 
-        'minor_violations', 'violations'
-    ]
-    available_metrics = [m for m in ALL_METRICS if m in df.columns]
+    from constants import SONAR_METRICS
+    available_metrics = [m for m in SONAR_METRICS if m in df.columns]
 
     METRIC_PRESETS = {
         "Custom (Manual Selection)": [],
