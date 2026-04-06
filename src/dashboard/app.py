@@ -1,21 +1,11 @@
 import streamlit as st
-
-# Backward-compatibility monkey-patch for unmaintained third-party plugins using deprecated st.cache
-if hasattr(st, 'cache'):
-    def _safe_cache(*args, **kwargs):
-        kwargs.pop('suppress_st_warning', None)
-        kwargs.pop('allow_output_mutation', None)
-        kwargs.pop('hash_funcs', None)
-        return st.cache_data(*args, **kwargs)
-    st.cache = _safe_cache
-
 import logging
 import pandas as pd
 import html
 import os
 import sys
-from streamlit_cookies_manager import CookieManager
 
+from streamlit_cookies_manager import CookieManager
 from database.factory import get_storage_client
 from dashboard_components import decompress_from_parquet
 
@@ -23,15 +13,14 @@ from data_service import fetch_projects, fetch_metrics_data
 from dashboard_view import display_dashboard, render_login_page
 from ui_styles import load_css, inject_custom_css, apply_theme_overrides, render_theme_toggle
 from sidebar_controller import render_sidebar
-from auth_manager import handle_auth, get_user_info, get_login_url
+from auth_manager import handle_auth, get_user_info, get_login_url, do_logout
+from html_factory import get_heading_html
 
 st.set_page_config(
     page_title="SonarCloud Dashboard",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-
 
 @st.cache_resource
 def init_storage_client():
@@ -53,37 +42,29 @@ def main():
     
     is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
 
-    if auth_token:
+    if not auth_token:
+        st.markdown(get_heading_html("SonarCloud Dashboard", "iconoir-stats-report", is_main_title=True, has_bottom_padding=False), unsafe_allow_html=True)
+        if not is_demo_mode:
+            auth_url = get_login_url(cookies)
+            with st.sidebar:
+                render_theme_toggle()
+            render_login_page(auth_url)
+            # We return early but do NOT call st.stop(). 
+            # This allows the script to reach completion, ensuring the CookieManager 
+            # successfully syncs the auth_state cookie to the browser before the user redirects.
+            return 
+        else:
+            safe_user_name, safe_initials, safe_photo_b64, safe_popover_label = "Demo User", "DU", "", "👤 Demo User"
+    else:
         user_name, raw_photo_b64 = get_user_info(cookies)
         if not user_name: user_name = "User"
         if not raw_photo_b64: raw_photo_b64 = ""
         
         initials = "".join([n[0] for n in user_name.split() if n])[:2].upper() or "U"
-        safe_user_name = html.escape(user_name)
-        safe_initials = html.escape(initials)
-
-        if raw_photo_b64 and not raw_photo_b64.startswith(("data:image/", "https://")):
-            raw_photo_b64 = ""
-
-        safe_photo_b64 = html.escape(raw_photo_b64)
+        safe_user_name, safe_initials, safe_photo_b64 = html.escape(user_name), html.escape(initials), html.escape(raw_photo_b64)
         safe_popover_label = html.escape(f"👤 {user_name.split()[0]}" if user_name != "User" else "👤 Profile")
-        st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; padding-bottom: 2rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
-    else:
-        st.markdown('<h1 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-stats-report"></i> SonarCloud Dashboard</h1>', unsafe_allow_html=True)
+        st.markdown(get_heading_html("SonarCloud Dashboard", "iconoir-stats-report", is_main_title=True, has_bottom_padding=True), unsafe_allow_html=True)
 
-        if not is_demo_mode:
-            auth_url = get_login_url(cookies)
-            with st.sidebar:
-                render_theme_toggle()
-
-            render_login_page(auth_url)
-            st.stop()
-        else:
-            safe_user_name = "Demo User"
-            safe_initials = "DU"
-            safe_photo_b64 = ""
-            safe_popover_label = "👤 Demo User"
-            
     if is_demo_mode:
         st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
         storage, organization = None, "demo-org"

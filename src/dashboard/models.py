@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 class SonarProject(BaseModel):
@@ -10,8 +10,26 @@ class SonarProject(BaseModel):
 class SonarMeasure(BaseModel):
     model_config = ConfigDict(extra='ignore')
     metric: str
-    value: Optional[str] = None
+    value: str = '0'
     bestValue: Optional[bool] = None
+
+    @computed_field
+    @property
+    def parsed_value(self) -> Union[float, int, str]:
+        if self.metric in ['coverage', 'duplicated_lines_density', 'security_hotspots_reviewed']:
+            try:
+                return float(self.value)
+            except ValueError:
+                return 0.0
+        elif self.metric in ['bugs', 'vulnerabilities', 'security_hotspots', 
+                              'code_smells', 'major_violations', 'minor_violations', 'violations']:
+            try:
+                if '.' in self.value:
+                    return int(float(self.value))
+                return int(self.value)
+            except (ValueError, TypeError):
+                return 0
+        return self.value
 
 class OrganizationMetrics(BaseModel):
     total_projects: int = 0

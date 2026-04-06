@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from ui_styles import render_theme_toggle
 from auth_manager import do_logout
 import html
+from html_factory import get_profile_photo_html, get_profile_initials_html, get_profile_name_html, get_heading_html
 
 def _release_memory_safely(*session_keys: str) -> None:
     keys_deleted = False
@@ -18,11 +19,11 @@ def handle_project_change():
 def render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label):
     with st.popover(safe_popover_label):
         if safe_photo_b64:
-            st.markdown(f'<div style="text-align: center;"><img src="{safe_photo_b64}" style="width: 64px; height: 64px; border-radius: 50%;"></div>', unsafe_allow_html=True)
+            st.markdown(get_profile_photo_html(safe_photo_b64), unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="text-align: center;"><div style="width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: #1db954; color: white; display: flex; justify-content: center; align-items: center; font-weight: 700;">{safe_initials}</div></div>', unsafe_allow_html=True)
+            st.markdown(get_profile_initials_html(safe_initials), unsafe_allow_html=True)
         
-        st.markdown(f"<p style='text-align: center; margin-top: 10px; margin-bottom: 10px;'><strong>{safe_user_name}</strong></p>", unsafe_allow_html=True)
+        st.markdown(get_profile_name_html(safe_user_name), unsafe_allow_html=True)
         
         render_theme_toggle()
         
@@ -34,7 +35,7 @@ def render_sidebar(is_demo_mode: bool, projects: list, cookies, safe_user_name, 
     with st.sidebar:
         render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label)
         
-        st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
+        st.markdown(get_heading_html("Controls", "iconoir-settings"), unsafe_allow_html=True)
         
         project_names = {p.key: p.name for p in projects}
 

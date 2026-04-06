@@ -6,10 +6,11 @@ import requests
 import msal
 import asyncio
 import aiohttp
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from config import config
 
 SCOPES = ["User.Read"]
+# Persistent keys for the cookie storage
 AUTH_COOKIE_KEYS = ["auth_token", "user_info_name", "user_photo", "auth_state"]
 
 @st.cache_resource(show_spinner=False)
@@ -83,7 +84,6 @@ def decrypt_val(val: str) -> str:
     try:
         return _get_fernet().decrypt(val.encode()).decode()
     except Exception:
-        # Security critical: Never return the original raw value on failure
         return ""
 
 def get_auth_token(cookies) -> str:
@@ -98,12 +98,14 @@ def get_user_info(cookies) -> tuple[str, str]:
     return decrypt_val(name) if name else None, decrypt_val(photo) if photo else None
 
 def handle_auth(cookies) -> str:
-    # Safely digest pending complete logout directives at the absolute start of a run
+    # 1. Digest pending logout directives
     if st.session_state.get("pending_logout"):
         for key in AUTH_COOKIE_KEYS:
             if key in cookies:
-                del cookies[key]
+                cookies[key] = None # Streamlit-cookies-manager way to mark for deletion
+        cookies.save()
         st.session_state["pending_logout"] = False
+        st.rerun()
 
     auth_token = get_auth_token(cookies)
     
@@ -117,12 +119,8 @@ def handle_auth(cookies) -> str:
             del cookies["auth_state"]
 
         if not expected_state or returned_state != expected_state:
-            # We defer cookie saving to get_login_url to prevent StreamlitDuplicateElementKey
-            # crashes since returning "" enforces an automatic login page redraw.
-            logging.error("CSRF attack thwarted: authentication state mismatch!")
+            logging.error(f"CSRF thwarted: Expected [{expected_state}] vs Returned [{returned_state}]")
             st.error("Authentication invalid: State mismatch (did you refresh an old link?). Clearing session automatically...", icon="🔐")
-            # If the user refreshed the callback URL, just ignore the stale code 
-            # and let the app render the default login screen naturally.
             return ""
 
         with st.spinner("Authenticating..."):
@@ -155,13 +153,28 @@ def handle_auth(cookies) -> str:
     return auth_token
 
 def get_login_url(cookies) -> str:
-    state_plain = secrets.token_urlsafe(32)
-    cookies["auth_state"] = state_plain
-    cookies.save()
+    # Only generate a new state if we don't already have one, or if it's been cleared
+    current_state = cookies.get("auth_state")
+    if not current_state:
+        state_plain = secrets.token_urlsafe(32)
+        cookies["auth_state"] = state_plain
+        # Crucial: save immediately so the browser has it before the user can click the login button
+        cookies.save()
+    else:
+        state_plain = current_state
+        
     return _get_auth_url(state=state_plain)
 
-def do_logout(cookies):
-    # Offload the structural cleanup and component re-render to the next cycle explicitly.
+def do_logout(cookies=None):
+    """
+    Robust logout: takes optional cookies argument to prevent TypeErrors during import reloads.
+    """
+    if cookies is not None:
+        for key in AUTH_COOKIE_KEYS:
+            if key in cookies:
+                cookies[key] = None
+        cookies.save()
+        
     st.session_state["pending_logout"] = True
-    st.info("You have been logged out.", icon="👋")
+    st.info("Log-out initiated. Clearing session...", icon="👋")
     st.rerun()

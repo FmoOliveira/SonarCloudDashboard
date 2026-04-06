@@ -10,7 +10,7 @@ msal-extensions>=1.3.1
 extra-streamlit-components
 numpy
 tenacity
-streamlit-cookies-manager
+streamlit-cookies-manager
 urllib3
 pytest
 aioresponses

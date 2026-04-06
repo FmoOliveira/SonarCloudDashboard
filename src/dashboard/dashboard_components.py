@@ -66,36 +66,18 @@ def apply_modern_layout(fig):
     )
     return fig
 
+from html_factory import get_metric_card_html
+
 def create_metric_card(title: str, value: str, icon_class: str, delta: Optional[str] = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
     safe_title = html.escape(title)
     safe_value = html.escape(value)
     safe_icon = html.escape(icon_class)
     safe_neon_class = html.escape(neon_class)
+    safe_delta = html.escape(delta) if delta else None
+    safe_color = html.escape(delta_color) if delta_color else None
 
-    delta_html = ""
-    if delta:
-        safe_delta = html.escape(delta)
-        safe_color = html.escape(delta_color)
-        delta_html = f"""
-<div class="neon-delta" style="color: {safe_color};">
-    {safe_delta} <span class="neon-delta-label">vs start</span>
-</div>"""
-
-    card_html = f"""
-<div class="neon-card {safe_neon_class}">
-    <div class="neon-icon-container">
-        <i class="{safe_icon}"></i>
-    </div>
-    <div class="neon-title">
-        {safe_title}
-    </div>
-    <div class="neon-value">
-        {safe_value}
-    </div>
-    {delta_html}
-</div>
-"""
+    card_html = get_metric_card_html(safe_title, safe_value, safe_icon, safe_neon_class, safe_delta, safe_color)
     st.markdown(card_html, unsafe_allow_html=True)
 
 
@@ -313,7 +295,9 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     # Calculate global max values to order traces Z-index correctly (Largest in back, smallest in front)
     try:
         metrics.sort(key=lambda m: plot_data[m].max() if m in plot_data.columns else 0, reverse=True)
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to sort area metrics by max value: {e}")
         pass # fallback to default order
 
     # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups

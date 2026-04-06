@@ -8,6 +8,7 @@ from dashboard_components import (
     render_area_chart, 
     inject_statistical_anomalies
 )
+from html_factory import get_login_card_html, get_heading_html
 
 def compute_metric_stats(earliest_vals, latest_vals, project_count, metric_col, is_percent=False, higher_is_better=True):
     if earliest_vals is None or earliest_vals.empty or latest_vals is None or latest_vals.empty or metric_col not in earliest_vals.columns or project_count == 0:
@@ -61,25 +62,7 @@ def render_login_page(auth_url: str):
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         # Main login card container
-        st.markdown("""
-            <div style="
-                background-color: var(--card-bg, #181B22);
-                border: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
-                border-radius: 16px;
-                padding: 3rem;
-                text-align: center;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-            ">
-                <div style="margin-bottom: 2rem;">
-                    <i class="iconoir-fingerprint" style="font-size: 5rem; color: #3B82F6; filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));"></i>
-                </div>
-                <h2 style="margin-bottom: 1rem; font-weight: 700;">Access Restricted</h2>
-                <p style="color: var(--text-muted, #888); margin-bottom: 2.5rem; font-size: 1.1rem;">
-                    Authentication is required to access the enterprise SonarCloud metrics dashboard. 
-                    Please sign in with your corporate Entra ID account.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(get_login_card_html(), unsafe_allow_html=True)
         
         # Streamlit button needs to be outside the raw HTML string but visually attached
         st.link_button(
@@ -119,7 +102,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         latest_vals = pd.DataFrame()
         project_count = 0
 
-    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Overview</h2>', unsafe_allow_html=True)
+    st.markdown(get_heading_html("Overview", "iconoir-graph-up"), unsafe_allow_html=True)
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
@@ -143,7 +126,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         val, delta, color = compute_metric_stats(earliest_vals, latest_vals, project_count, 'reliability_rating')
         create_metric_card("Reliability Rating", val, "iconoir-flash", delta, color, neon_class="neon-blue")
     
-    st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-graph-up"></i> Detailed Metrics</h2>', unsafe_allow_html=True)
+    st.markdown(get_heading_html("Detailed Metrics", "iconoir-graph-up"), unsafe_allow_html=True)
     
     from constants import SONAR_METRICS
     available_metrics = [m for m in SONAR_METRICS if m in df.columns]

@@ -82,23 +82,9 @@ class SonarCloudAPI:
             measures = {}
             if 'component' in response and 'measures' in response['component']:
                 for item in response['component']['measures']:
+                    item['value'] = item.get('value', '0')
                     measure = SonarMeasure(**item)
-                    metric = measure.metric
-                    value = measure.value or '0'
-                    
-                    if metric in ['coverage', 'duplicated_lines_density']:
-                        try:
-                            measures[metric] = float(value)
-                        except ValueError:
-                            measures[metric] = 0.0
-                    elif metric in ['bugs', 'vulnerabilities', 'security_hotspots', 
-                                  'code_smells', 'major_violations', 'minor_violations', 'violations']:
-                        try:
-                            measures[metric] = int(value)
-                        except ValueError:
-                            measures[metric] = 0
-                    else:
-                        measures[metric] = value
+                    measures[measure.metric] = measure.parsed_value
             
             return measures if measures else None
         except Exception as e:
@@ -140,20 +126,8 @@ class SonarCloudAPI:
                             if date not in history_data:
                                 history_data[date] = {'date': date}
                             
-                            if metric in ['coverage', 'duplicated_lines_density', 'security_hotspots_reviewed']:
-                                try:
-                                    history_data[date][metric] = float(value)
-                                except ValueError:
-                                    history_data[date][metric] = 0.0
-                            elif metric in ['bugs', 'vulnerabilities', 'security_hotspots', 
-                                          'code_smells', 'major_violations',
-                                          'minor_violations', 'violations']:
-                                try:
-                                    history_data[date][metric] = int(float(value)) if '.' in value else int(value)
-                                except ValueError:
-                                    history_data[date][metric] = 0
-                            else:
-                                history_data[date][metric] = value
+                            measure = SonarMeasure(metric=metric, value=str(value))
+                            history_data[date][metric] = measure.parsed_value
                 
                 paging = response.get('paging', {})
                 total = paging.get('total', 0)
