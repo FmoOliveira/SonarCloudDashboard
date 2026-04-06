@@ -1,41 +1,33 @@
 import streamlit as st
-import os
 import secrets
 import logging
 import base64
 import requests
 import msal
+import asyncio
+import aiohttp
 from cryptography.fernet import Fernet, InvalidToken
+from config import config
 
 SCOPES = ["User.Read"]
 AUTH_COOKIE_KEYS = ["auth_token", "user_info_name", "user_photo", "auth_state"]
 
-def _get_config(key: str) -> str:
-    value = os.environ.get(f"AZURE_AD_{key.upper()}")
-    if value:
-        return value
-    try:
-        return st.secrets["azure_ad"][key.lower()]
-    except (KeyError, FileNotFoundError) as e:
-        logging.error(f"Missing Azure AD config '{key}': {e}")
-        st.error("Security Configuration Error: Missing identity provider configuration.", icon="🚨")
-        st.stop()
-
 @st.cache_resource(show_spinner=False)
 def get_msal_client():
-    tenant_id = _get_config("tenant_id")
-    client_id = _get_config("client_id")
-    client_secret = _get_config("client_secret")
-    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    if not config.tenant_id or not config.client_id:
+        st.error("Security Configuration Error: Missing Azure AD (Entra) identity provider configuration.", icon="🚨")
+        st.stop()
+        
+    authority = f"https://login.microsoftonline.com/{config.tenant_id}"
     return msal.ConfidentialClientApplication(
-        client_id,
+        config.client_id,
         authority=authority,
-        client_credential=client_secret
+        client_credential=config.client_secret
     )
 
 def _get_auth_url(state=None):
     client = get_msal_client()
-    kwargs = {"redirect_uri": _get_config("redirect_uri")}
+    kwargs = {"redirect_uri": config.redirect_uri}
     if state:
         kwargs["state"] = state
     return client.get_authorization_request_url(SCOPES, **kwargs)
@@ -45,7 +37,7 @@ def _acquire_token_by_auth_code(auth_code: str):
     result = client.acquire_token_by_authorization_code(
         auth_code,
         scopes=SCOPES,
-        redirect_uri=_get_config("redirect_uri")
+        redirect_uri=config.redirect_uri
     )
     if "error" in result:
         logging.error(f"MSAL Token Error: {result.get('error_description', result.get('error'))}")
@@ -53,44 +45,46 @@ def _acquire_token_by_auth_code(auth_code: str):
         st.stop()
     return result
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _get_user_photo(access_token: str) -> str:
+async def _get_user_photo_async(access_token: str) -> str:
     headers = {'Authorization': f'Bearer {access_token}'}
     try:
-        response = requests.get("https://graph.microsoft.com/v1.0/me/photo/$value", headers=headers, timeout=5)
-        if response.status_code == 200:
-            img_b64 = base64.b64encode(response.content).decode('utf-8')
-            return f"data:image/jpeg;base64,{img_b64}"
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get("https://graph.microsoft.com/v1.0/me/photo/$value", timeout=5) as response:
+                if response.status == 200:
+                    img_data = await response.read()
+                    img_b64 = base64.b64encode(img_data).decode('utf-8')
+                    return f"data:image/jpeg;base64,{img_b64}"
     except Exception as e:
-        logging.warning(f"Failed to fetch user photo: {e}")
+        logging.warning(f"Failed to fetch user photo asynchronously: {e}")
     return ""
 
-def _get_fernet():
+def _get_user_photo(access_token: str) -> str:
     try:
-        if "cookie_encryption_key" in st.secrets:
-            key = st.secrets["cookie_encryption_key"]
-            return Fernet(key.encode() if isinstance(key, str) else key)
+        return asyncio.run(_get_user_photo_async(access_token))
     except Exception:
-        pass
-    fallback_dev_key = b'_B-G0rLQ89Q4uXfJpI3E4L2XQ78X4L9B0rLQ89Q4uXf=' 
-    logging.warning("No `cookie_encryption_key` set in .streamlit/secrets.toml! Using insecure DEV fallback key.")
-    return Fernet(fallback_dev_key)
+        return ""
+
+def _get_fernet():
+    if not config.cookie_encryption_key:
+        logging.critical("CRITICAL VULNERABILITY: Cookie encryption key is missing!")
+        st.error("System configuration error: secure encryption key is not set. Halting for security purposes.", icon="🚨")
+        st.stop()
+    return Fernet(config.cookie_encryption_key.encode())
 
 def encrypt_val(val: str) -> str:
     if not val: return val
     try:
         return _get_fernet().encrypt(val.encode()).decode()
     except Exception:
-        return val
+        return ""
 
 def decrypt_val(val: str) -> str:
     if not val: return val
     try:
         return _get_fernet().decrypt(val.encode()).decode()
-    except InvalidToken:
-        return val
     except Exception:
-        return val
+        # Security critical: Never return the original raw value on failure
+        return ""
 
 def get_auth_token(cookies) -> str:
     token = cookies.get("auth_token")
@@ -104,6 +98,13 @@ def get_user_info(cookies) -> tuple[str, str]:
     return decrypt_val(name) if name else None, decrypt_val(photo) if photo else None
 
 def handle_auth(cookies) -> str:
+    # Safely digest pending complete logout directives at the absolute start of a run
+    if st.session_state.get("pending_logout"):
+        for key in AUTH_COOKIE_KEYS:
+            if key in cookies:
+                del cookies[key]
+        st.session_state["pending_logout"] = False
+
     auth_token = get_auth_token(cookies)
     
     if not auth_token and "code" in st.query_params:
@@ -112,15 +113,17 @@ def handle_auth(cookies) -> str:
         st.query_params.clear()
 
         expected_state = cookies.get("auth_state")
-        needs_save = False
         if "auth_state" in cookies:
             del cookies["auth_state"]
-            needs_save = True
 
         if not expected_state or returned_state != expected_state:
-            if needs_save:
-                cookies.save()
-            logging.warning("Authentication state mismatch (potential CSRF or navigation issue). Continuing exchange.")
+            # We defer cookie saving to get_login_url to prevent StreamlitDuplicateElementKey
+            # crashes since returning "" enforces an automatic login page redraw.
+            logging.error("CSRF attack thwarted: authentication state mismatch!")
+            st.error("Authentication invalid: State mismatch (did you refresh an old link?). Clearing session automatically...", icon="🔐")
+            # If the user refreshed the callback URL, just ignore the stale code 
+            # and let the app render the default login screen naturally.
+            return ""
 
         with st.spinner("Authenticating..."):
             token_result = _acquire_token_by_auth_code(auth_code)
@@ -141,13 +144,11 @@ def handle_auth(cookies) -> str:
             else:
                 error_desc = token_result.get("error_description", "Unknown error")
                 if "AADSTS54005" in error_desc:
-                    if needs_save: 
-                        cookies.save()
+                    cookies.save()
                     st.rerun()
                 else:
                     logging.error(f"Authentication failed: {error_desc}")
-                    if needs_save: 
-                        cookies.save()
+                    cookies.save()
                     st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()
                     
@@ -160,9 +161,7 @@ def get_login_url(cookies) -> str:
     return _get_auth_url(state=state_plain)
 
 def do_logout(cookies):
-    for key in AUTH_COOKIE_KEYS:
-        if key in cookies:
-            del cookies[key]
-    cookies.save()
+    # Offload the structural cleanup and component re-render to the next cycle explicitly.
+    st.session_state["pending_logout"] = True
     st.info("You have been logged out.", icon="👋")
     st.rerun()

@@ -9,10 +9,6 @@ def _release_memory_safely(*session_keys: str) -> None:
     for key in session_keys:
         if key in st.session_state:
             del st.session_state[key]
-            keys_deleted = True
-    if keys_deleted:
-        import gc
-        gc.collect()
 
 def handle_project_change():
     _release_memory_safely('metrics_data_parquet', 'data_project', 'data_branch', 'show_anomalies')
@@ -34,7 +30,7 @@ def render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_
         if st.button("Logout", use_container_width=True, type="primary", icon=":material/logout:"):
             do_logout(cookies)
 
-def render_sidebar(api, is_demo_mode: bool, projects: list, cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label) -> tuple:
+def render_sidebar(is_demo_mode: bool, projects: list, cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label) -> tuple:
     with st.sidebar:
         render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label)
         
@@ -54,7 +50,7 @@ def render_sidebar(api, is_demo_mode: bool, projects: list, cookies, safe_user_n
             branch_options = ["main"]
         else:
             from data_service import fetch_project_branches
-            branches = fetch_project_branches(api, selected_project)
+            branches = fetch_project_branches(selected_project)
             branch_options = [b.name for b in branches]
 
         date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)

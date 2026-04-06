@@ -1,0 +1,86 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0
+rootdir: D:\PersonalGit\SonarCloudDashboard
+configfile: pytest.ini
+plugins: asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 19 items / 6 errors
+
+=================================== ERRORS ====================================
+__________________ ERROR collecting tests/test_auth_flow.py ___________________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_auth_flow.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_auth_flow.py:4: in <module>
+    from auth import get_auth_url, acquire_token_by_auth_code, logout
+E   ModuleNotFoundError: No module named 'auth'
+________________ ERROR collecting tests/test_auth_security.py _________________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_auth_security.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_auth_security.py:3: in <module>
+    import src.dashboard.auth as auth
+E   ModuleNotFoundError: No module named 'src.dashboard.auth'
+____________ ERROR collecting tests/test_azure_storage_security.py ____________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_azure_storage_security.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_azure_storage_security.py:3: in <module>
+    from azure_storage import AzureTableStorage
+E   ModuleNotFoundError: No module named 'azure_storage'
+______________ ERROR collecting tests/test_collision_security.py ______________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_collision_security.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_collision_security.py:3: in <module>
+    from azure_storage import AzureTableStorage
+E   ModuleNotFoundError: No module named 'azure_storage'
+_________________ ERROR collecting tests/test_data_service.py _________________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_data_service.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_data_service.py:7: in <module>
+    from data_service import get_secret, fetch_projects, fetch_project_branches, fetch_metrics_data
+src\dashboard\data_service.py:11: in <module>
+    from config import config
+src\dashboard\config.py:5: in <module>
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+E   ModuleNotFoundError: No module named 'pydantic_settings'
+__________________ ERROR collecting tests/test_sonar_api.py ___________________
+ImportError while importing test module 'D:\PersonalGit\SonarCloudDashboard\tests\test_sonar_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_sonar_api.py:9: in <module>
+    from data_service import fetch_sonar_history_async
+src\dashboard\data_service.py:11: in <module>
+    from config import config
+src\dashboard\config.py:5: in <module>
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+E   ModuleNotFoundError: No module named 'pydantic_settings'
+=========================== short test summary info ===========================
+ERROR tests/test_auth_flow.py
+ERROR tests/test_auth_security.py
+ERROR tests/test_azure_storage_security.py
+ERROR tests/test_collision_security.py
+ERROR tests/test_data_service.py
+ERROR tests/test_sonar_api.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 6 errors during collection !!!!!!!!!!!!!!!!!!!
+============================== 6 errors in 2.01s ==============================

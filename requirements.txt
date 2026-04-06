@@ -16,3 +16,4 @@ pytest
 aioresponses
 cryptography
 pydantic
+pydantic-settings

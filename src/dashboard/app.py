@@ -13,11 +13,9 @@ import logging
 import pandas as pd
 import html
 import os
-import gc
 import sys
 from streamlit_cookies_manager import CookieManager
 
-from sonarcloud_api import SonarCloudAPI
 from database.factory import get_storage_client
 from dashboard_components import decompress_from_parquet
 
@@ -33,11 +31,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-@st.cache_resource
-def init_sonarcloud_api():
-    from data_service import get_secret
-    token = get_secret("sonarcloud", "api_token")
-    return SonarCloudAPI(token)
+
 
 @st.cache_resource
 def init_storage_client():
@@ -92,17 +86,16 @@ def main():
             
     if is_demo_mode:
         st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
-        api, storage, organization = None, None, "demo-org"
+        storage, organization = None, "demo-org"
         from models import SonarProject
         projects = [SonarProject(key="demo-project-alpha", name="Frontend Web Application")]
     else:
         try:
-            api = init_sonarcloud_api()
             storage = init_storage_client()
-            from data_service import get_secret
-            organization = get_secret("sonarcloud", "organization_key")
+            from config import config
+            organization = config.sonarcloud_organization_key
             with st.spinner("Loading projects..."):
-                projects = fetch_projects(api, organization)
+                projects = fetch_projects(organization)
             if not projects:
                 st.error("No projects found or unable to fetch projects. Please check your organization key and permissions.", icon="🚨")
                 st.stop()
@@ -111,7 +104,7 @@ def main():
             st.stop()
 
     selected_project, branch_filter, days, execute_analysis, project_names = render_sidebar(
-        api, is_demo_mode, projects, cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label
+        is_demo_mode, projects, cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label
     )
 
     if execute_analysis:
@@ -123,7 +116,7 @@ def main():
                 compressed_bytes = b""
             else:
                 try:
-                    compressed_bytes = fetch_metrics_data(api, [selected_project], days, branch_filter, storage)
+                    compressed_bytes = fetch_metrics_data([selected_project], days, branch_filter, storage)
                 except Exception as e:
                     st.error(f"Error fetching metrics: {e}", icon="🚨")
                     compressed_bytes = b""
@@ -149,7 +142,6 @@ def main():
             display_dashboard(metrics_data, [data_project], projects, data_branch)
 
             del metrics_data
-            gc.collect()
         else:
             st.info("No metrics data available for the selected filters. Please try adjusting the time period or branch.", icon="🔍")
     else:

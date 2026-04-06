@@ -2,46 +2,38 @@ import pandas as pd
 import asyncio
 import aiohttp
 import logging
-import os
 from datetime import datetime, timedelta
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
 from sonarcloud_api import SonarCloudAPI
 from dashboard_components import compress_to_parquet
 import streamlit as st
 from constants import SONAR_METRICS
+from config import config
 
-class ConfigurationError(Exception): pass
 class DataServiceError(Exception): pass
 
-def get_secret(domain: str, key: str) -> str:
-    env_name = f"{domain.upper()}_{key.upper()}"
-    if env_name in os.environ:
-        return os.environ[env_name]
-        
-    try:
-        return st.secrets[domain][key]
-    except FileNotFoundError:
-        logging.error("Security Configuration Error: `secrets.toml` is missing.")
-        raise ConfigurationError("A required configuration file is missing.")
-    except KeyError:
-        error_msg = f"Security Configuration Error: Missing key '{key}' in domain '{domain}'."
-        logging.critical(error_msg)
-        raise ConfigurationError("A required configuration key is missing.")
-
 @st.cache_data(ttl=300)
-def fetch_projects(_api, organization):
+def fetch_projects(organization: str):
+    async def _run():
+        async with aiohttp.ClientSession() as session:
+            api = SonarCloudAPI(config.sonarcloud_api_token, session)
+            return await api.get_organization_projects(organization)
+    
     try:
-        projects = _api.get_organization_projects(organization)
-        return projects
+        return asyncio.run(_run())
     except Exception as e:
         logging.error(f"Error fetching projects: {str(e)}")
         raise DataServiceError("Error fetching projects. An internal error occurred.")
 
 @st.cache_data(ttl=300)
-def fetch_project_branches(_api, project_key):
+def fetch_project_branches(project_key: str):
+    async def _run():
+        async with aiohttp.ClientSession() as session:
+            api = SonarCloudAPI(config.sonarcloud_api_token, session)
+            return await api.get_project_branches(project_key)
+            
     try:
-        branches = _api.get_project_branches(project_key)
-        return branches
+        return asyncio.run(_run())
     except Exception as e:
         logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
         return []
@@ -113,7 +105,7 @@ async def _fetch_all_projects_history(project_keys: list, token: str, days: int,
         return dict(zip(project_keys, results))
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
+def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
     dfs_to_concat = []
     projects_to_fetch = []
     
@@ -146,13 +138,9 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
              projects_to_fetch.append(project_key)
     
     if projects_to_fetch:
-        token = get_secret("sonarcloud", "api_token")
+        token = config.sonarcloud_api_token
         
-        try:
-            loop = asyncio.get_running_loop()
-            raw_results = loop.run_until_complete(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
-        except RuntimeError:
-            raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
+        raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
         
         for project_key, result in raw_results.items():
             if isinstance(result, Exception):
@@ -172,7 +160,12 @@ def fetch_metrics_data(_api: SonarCloudAPI, project_keys: list, days: int, branc
                             logging.warning(f"Could not store data for {project_key}: {str(e)}")
                 else:
                     try:
-                        measures = _api.get_project_measures(project_key, branch)
+                        async def _fallback_measure():
+                            async with aiohttp.ClientSession() as sess:
+                                api = SonarCloudAPI(token, sess)
+                                return await api.get_project_measures(project_key, branch)
+                        
+                        measures = asyncio.run(_fallback_measure())
                         if measures:
                             measures['project_key'] = project_key
                             measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')

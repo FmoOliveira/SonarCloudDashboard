@@ -298,7 +298,9 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
 
                 if converted_cols:
                     display_data = display_data.assign(**converted_cols)
-            except Exception:
+            except Exception as e:
+                import logging
+                logging.warning(f"Optimization fallback: DataFrame numeric conversion failed ({e}). Falling back to string conversion.")
                 for c in target_cols:
                     display_data[c] = display_data[c].astype(str)
         
