@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from ui_styles import render_theme_toggle
-from auth_controller import do_logout
+from auth_manager import do_logout
 import html
 
 def _release_memory_safely(*session_keys: str) -> None:
@@ -40,11 +40,11 @@ def render_sidebar(api, is_demo_mode: bool, projects: list, cookies, safe_user_n
         
         st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;"><i class="iconoir-settings"></i> Controls</h2>', unsafe_allow_html=True)
         
-        project_names = {p['key']: p['name'] for p in projects}
+        project_names = {p.key: p.name for p in projects}
 
         selected_project = st.selectbox(
             "Project",
-            options=[p['key'] for p in projects],
+            options=[p.key for p in projects],
             format_func=lambda x: project_names.get(x, x),
             on_change=handle_project_change,
             help="Select a repository to view its metrics."
@@ -55,7 +55,7 @@ def render_sidebar(api, is_demo_mode: bool, projects: list, cookies, safe_user_n
         else:
             from data_service import fetch_project_branches
             branches = fetch_project_branches(api, selected_project)
-            branch_options = [b.get('name', 'Unknown') for b in branches]
+            branch_options = [b.name for b in branches]
 
         date_range = st.selectbox("Time Period", options=["Last 7 days", "Last 30 days", "Last 90 days", "Last year", "Custom..."], index=1)
 

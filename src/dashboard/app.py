@@ -25,7 +25,7 @@ from data_service import fetch_projects, fetch_metrics_data
 from dashboard_view import display_dashboard, render_login_page
 from ui_styles import load_css, inject_custom_css, apply_theme_overrides, render_theme_toggle
 from sidebar_controller import render_sidebar
-from auth_controller import handle_auth, get_user_info, get_login_url
+from auth_manager import handle_auth, get_user_info, get_login_url
 
 st.set_page_config(
     page_title="SonarCloud Dashboard",
@@ -93,7 +93,8 @@ def main():
     if is_demo_mode:
         st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
         api, storage, organization = None, None, "demo-org"
-        projects = [{"key": "demo-project-alpha", "name": "Frontend Web Application"}]
+        from models import SonarProject
+        projects = [SonarProject(key="demo-project-alpha", name="Frontend Web Application")]
     else:
         try:
             api = init_sonarcloud_api()

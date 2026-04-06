@@ -96,7 +96,7 @@ def render_login_page(auth_url: str):
 def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     """Display the main dashboard with metrics and charts"""
     
-    project_names = {p['key']: p['name'] for p in all_projects}
+    project_names = {p.key: p.name for p in all_projects}
     df['project_name'] = df['project_key'].map(project_names)
     
     # ⚡ Bolt Optimization: Sort dataframe by date once globally instead of multiple times

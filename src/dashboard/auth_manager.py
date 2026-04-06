@@ -1,8 +1,69 @@
 import streamlit as st
+import os
 import secrets
-from cryptography.fernet import Fernet, InvalidToken
 import logging
-from auth import get_auth_url, acquire_token_by_auth_code, get_user_photo, logout
+import base64
+import requests
+import msal
+from cryptography.fernet import Fernet, InvalidToken
+
+SCOPES = ["User.Read"]
+AUTH_COOKIE_KEYS = ["auth_token", "user_info_name", "user_photo", "auth_state"]
+
+def _get_config(key: str) -> str:
+    value = os.environ.get(f"AZURE_AD_{key.upper()}")
+    if value:
+        return value
+    try:
+        return st.secrets["azure_ad"][key.lower()]
+    except (KeyError, FileNotFoundError) as e:
+        logging.error(f"Missing Azure AD config '{key}': {e}")
+        st.error("Security Configuration Error: Missing identity provider configuration.", icon="🚨")
+        st.stop()
+
+@st.cache_resource(show_spinner=False)
+def get_msal_client():
+    tenant_id = _get_config("tenant_id")
+    client_id = _get_config("client_id")
+    client_secret = _get_config("client_secret")
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    return msal.ConfidentialClientApplication(
+        client_id,
+        authority=authority,
+        client_credential=client_secret
+    )
+
+def _get_auth_url(state=None):
+    client = get_msal_client()
+    kwargs = {"redirect_uri": _get_config("redirect_uri")}
+    if state:
+        kwargs["state"] = state
+    return client.get_authorization_request_url(SCOPES, **kwargs)
+
+def _acquire_token_by_auth_code(auth_code: str):
+    client = get_msal_client()
+    result = client.acquire_token_by_authorization_code(
+        auth_code,
+        scopes=SCOPES,
+        redirect_uri=_get_config("redirect_uri")
+    )
+    if "error" in result:
+        logging.error(f"MSAL Token Error: {result.get('error_description', result.get('error'))}")
+        st.error("Authentication Error: Failed to acquire token.", icon="🚨")
+        st.stop()
+    return result
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _get_user_photo(access_token: str) -> str:
+    headers = {'Authorization': f'Bearer {access_token}'}
+    try:
+        response = requests.get("https://graph.microsoft.com/v1.0/me/photo/$value", headers=headers, timeout=5)
+        if response.status_code == 200:
+            img_b64 = base64.b64encode(response.content).decode('utf-8')
+            return f"data:image/jpeg;base64,{img_b64}"
+    except Exception as e:
+        logging.warning(f"Failed to fetch user photo: {e}")
+    return ""
 
 def _get_fernet():
     try:
@@ -11,9 +72,7 @@ def _get_fernet():
             return Fernet(key.encode() if isinstance(key, str) else key)
     except Exception:
         pass
-    # Fallback to a consistent DEV key if no secret is configured.
-    # Without this, refreshing the browser wipes st.session_state and makes the cookies undecryptable.
-    fallback_dev_key = b'_B-G0rLQ89Q4uXfJpI3E4L2XQ78X4L9B0rLQ89Q4uXf=' # Dummy dev key
+    fallback_dev_key = b'_B-G0rLQ89Q4uXfJpI3E4L2XQ78X4L9B0rLQ89Q4uXf=' 
     logging.warning("No `cookie_encryption_key` set in .streamlit/secrets.toml! Using insecure DEV fallback key.")
     return Fernet(fallback_dev_key)
 
@@ -64,7 +123,7 @@ def handle_auth(cookies) -> str:
             logging.warning("Authentication state mismatch (potential CSRF or navigation issue). Continuing exchange.")
 
         with st.spinner("Authenticating..."):
-            token_result = acquire_token_by_auth_code(auth_code)
+            token_result = _acquire_token_by_auth_code(auth_code)
 
             if "access_token" in token_result:
                 auth_token = token_result["access_token"]
@@ -74,7 +133,7 @@ def handle_auth(cookies) -> str:
                 name = user_info.get("name", "User")
                 cookies["user_info_name"] = encrypt_val(name)
                 
-                photo_b64 = get_user_photo(auth_token)
+                photo_b64 = _get_user_photo(auth_token)
                 if photo_b64:
                     cookies["user_photo"] = encrypt_val(photo_b64)
                 
@@ -98,8 +157,12 @@ def get_login_url(cookies) -> str:
     state_plain = secrets.token_urlsafe(32)
     cookies["auth_state"] = state_plain
     cookies.save()
-    return get_auth_url(state=state_plain)
+    return _get_auth_url(state=state_plain)
 
 def do_logout(cookies):
-    # Pass cookies down to original auth.logout which clears the keys
-    logout(cookies)
+    for key in AUTH_COOKIE_KEYS:
+        if key in cookies:
+            del cookies[key]
+    cookies.save()
+    st.info("You have been logged out.", icon="👋")
+    st.rerun()
