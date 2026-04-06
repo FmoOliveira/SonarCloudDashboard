@@ -8,6 +8,8 @@ import sys
 from streamlit_cookies_manager import CookieManager
 from database.factory import get_storage_client
 from dashboard_components import decompress_from_parquet
+from models import SonarProject
+from config import config
 
 from data_service import fetch_projects, fetch_metrics_data
 from dashboard_view import display_dashboard, render_login_page
@@ -68,12 +70,10 @@ def main():
     if is_demo_mode:
         st.sidebar.warning("🛠️ Demo Mode", icon="⚠️")
         storage, organization = None, "demo-org"
-        from models import SonarProject
         projects = [SonarProject(key="demo-project-alpha", name="Frontend Web Application")]
     else:
         try:
             storage = init_storage_client()
-            from config import config
             organization = config.sonarcloud_organization_key
             with st.spinner("Loading projects..."):
                 projects = fetch_projects(organization)

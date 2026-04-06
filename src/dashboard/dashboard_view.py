@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import logging
 from datetime import datetime
+from constants import SONAR_METRICS
 from dashboard_components import (
     create_metric_card, 
     render_dynamic_subplots, 
@@ -128,7 +130,6 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     
     st.markdown(get_heading_html("Detailed Metrics", "iconoir-graph-up"), unsafe_allow_html=True)
     
-    from constants import SONAR_METRICS
     available_metrics = [m for m in SONAR_METRICS if m in df.columns]
 
     METRIC_PRESETS = {
@@ -245,16 +246,19 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
     st.markdown('<h2 style="display: flex; align-items: center; gap: 0.5rem;"><i class="iconoir-list"></i> Metric Details</h2>', unsafe_allow_html=True)
     
     if not df.empty:
-        display_data = df.copy()
-        display_data['project_name'] = display_data['project_key'].map(project_names)
-        
-        if 'branch' in display_data.columns:
-            display_data['branch'] = display_data['branch'].astype(object).fillna("").astype(str)
-        else:
-            display_data['branch'] = branch_filter if branch_filter else ""
-
-        display_columns = ['date', 'project_name', 'branch'] + [col for col in available_metrics if col in display_data.columns]
-        display_data = display_data[display_columns]
+        # Build column list first, then project — avoids allocating a full copy
+        # of the DataFrame only to discard most columns on the next line.
+        display_columns = ['date', 'project_name', 'branch'] + [col for col in available_metrics if col in df.columns]
+        branch_col = (
+            df['branch'].astype(object).fillna("").astype(str)
+            if 'branch' in df.columns
+            else (branch_filter if branch_filter else "")
+        )
+        working = df.assign(
+            project_name=df['project_key'].map(project_names),
+            branch=branch_col
+        )
+        display_data = working[[c for c in display_columns if c in working.columns]].copy()
         display_data = display_data.sort_values(['date', 'project_name', 'branch'])
         
         # ⚡ Bolt Optimization: Replace O(C * N) sequential column formatting with
@@ -282,7 +286,6 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                 if converted_cols:
                     display_data = display_data.assign(**converted_cols)
             except Exception as e:
-                import logging
                 logging.warning(f"Optimization fallback: DataFrame numeric conversion failed ({e}). Falling back to string conversion.")
                 for c in target_cols:
                     display_data[c] = display_data[c].astype(str)

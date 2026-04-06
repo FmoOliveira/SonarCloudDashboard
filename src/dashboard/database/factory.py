@@ -4,6 +4,7 @@ import html
 from database.base import StorageInterface
 from config import config
 
+
 def get_storage_client() -> StorageInterface | None:
     """
     Factory method to dynamically instantiate the correct database provider 
@@ -18,11 +19,14 @@ def get_storage_client() -> StorageInterface | None:
         if provider == "azure":
             from database.azure_storage import AzureTableStorage
             
-            if not config.azure_storage_connection_string:
+            # Unwrap SecretStr — the plain value is passed only to the constructor,
+            # never stored in a variable that persists beyond this scope.
+            connection_string = config.azure_storage_connection_string.get_secret_value()
+            if not connection_string:
                 logging.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.")
                 st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
                 st.stop()
-            return AzureTableStorage(config.azure_storage_connection_string)
+            return AzureTableStorage(connection_string)
                 
         elif provider == "postgres":
             # Future expansion
@@ -35,7 +39,14 @@ def get_storage_client() -> StorageInterface | None:
             safe_provider = html.escape(str(provider))
             st.error(f"Unsupported database provider: '{safe_provider}'", icon="🚨")
             st.stop()
-            
+
+    except RuntimeError as e:
+        # RuntimeError is raised by get_msal_client() and _get_fernet() when a
+        # required config key is missing. We catch it here (outside any
+        # @st.cache_resource boundary) so we can safely call st.error/st.stop().
+        logging.critical(f"Configuration Error: {e}")
+        st.error(f"System configuration error: {e}", icon="🚨")
+        st.stop()
     except Exception as e:
         logging.critical(f"Database Factory Initialization Error: {str(e)}")
         st.error("Database Initialization Error: An internal system error occurred.", icon="🚨")

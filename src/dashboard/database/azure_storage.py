@@ -4,10 +4,18 @@ import logging
 from datetime import datetime
 from itertools import islice
 from azure.data.tables import TableServiceClient
-import streamlit as st
 import pandas as pd
 from typing import Dict, List, Any, Optional
-from database.base import StorageInterface
+from database.base import StorageInterface, DataCoverage
+
+
+def _force_naive(dt):
+    """Ensures a datetime/Timestamp is timezone-naive, handling all variants."""
+    if pd.isna(dt):
+        return dt
+    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+        return dt.tz_localize(None)
+    return dt.replace(tzinfo=None) if hasattr(dt, 'replace') else pd.Timestamp(dt).to_pydatetime()
 
 class AzureTableStorage(StorageInterface):
     """
@@ -220,75 +228,60 @@ class AzureTableStorage(StorageInterface):
             logging.warning(f"Failed to retrieve metrics data: {str(e)}")
             return []
     
-    def check_data_coverage(self, project_key: str, branch: str = None, days: int = 30) -> Dict[str, any]:
+    def check_data_coverage(self, project_key: str, branch: str = None, days: int = 30) -> DataCoverage:
         """Check if we have sufficient data coverage for the requested period"""
         try:
             stored_data = self.retrieve_metrics_data(project_key, branch, days)
             
             if not stored_data:
-                return {"has_coverage": False, "reason": "No stored data found"}
-            
-            import pandas as pd
-            from datetime import datetime
+                return {"has_coverage": False, "data": [], "latest_date": None}
             
             df = pd.DataFrame(stored_data)
             if 'date' not in df.columns:
-                return {"has_coverage": False, "reason": "No date column in stored data"}
+                return {"has_coverage": False, "data": [], "latest_date": None}
             
             # Convert dates and check coverage
             df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
-            df['date'] = df['date'].dt.tz_localize(None)
+            df['date'] = df['date'].dt.tz_convert(None)  # strip tz → naive
             latest_stored = df['date'].max()
-            # oldest_stored = df['date'].min() # Unused
 
-            now = datetime.now()  # Also naive
-            
-            # Make 100% sure both are naive
-            def force_naive(dt):
-                # Handles pd.Timestamp, datetime, or even np.datetime64
-                if pd.isna(dt):
-                    return dt
-                if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
-                    # pandas Timestamp with tzinfo
-                    return dt.tz_localize(None)
-                return dt.replace(tzinfo=None) if hasattr(dt, 'replace') else pd.Timestamp(dt).to_pydatetime()
+            now = datetime.now()
 
-            latest_stored = force_naive(latest_stored)
-            now = force_naive(now)
+            latest_stored = _force_naive(latest_stored)
+            now = _force_naive(now)
 
-            # If latest_stored is NaT, handle gracefully
             if pd.isna(latest_stored):
                 days_since_latest = float('inf')
+                latest_date_str = None
             else:
                 days_since_latest = (now - latest_stored).days
+                latest_date_str = latest_stored.strftime('%Y-%m-%d')
             
-            # Check if we have sufficient data points
-            required_min_records = max(1, days // 10)  # At least 1 record per 10 days requested
+            required_min_records = max(1, days // 10)
             has_sufficient_data = len(stored_data) >= required_min_records
             
-            # Check required metrics are present
             required_metrics = ['vulnerabilities', 'security_hotspots', 'duplicated_lines_density', 
                               'security_rating', 'reliability_rating']
             missing_metrics = [m for m in required_metrics if m not in df.columns or df[m].isna().all()]
             
             has_coverage = (
-                days_since_latest < 2 and  # Data is less than 2 days old
-                has_sufficient_data and    # Sufficient number of records
-                len(missing_metrics) == 0  # All required metrics present
+                days_since_latest < 2 and
+                has_sufficient_data and
+                len(missing_metrics) == 0
             )
             
             return {
                 "has_coverage": has_coverage,
+                "data": stored_data,
+                "latest_date": latest_date_str,
                 "record_count": len(stored_data),
-                "latest_date": latest_stored.strftime('%Y-%m-%d'),
                 "days_since_latest": days_since_latest,
                 "missing_metrics": missing_metrics,
-                "reason": f"Data coverage: {len(stored_data)} records, latest: {latest_stored.strftime('%Y-%m-%d')}",
-                "data": stored_data
             }
             
         except Exception as e:
-            return {"has_coverage": False, "reason": f"Error checking coverage: {str(e)}"}
+            logging.warning(f"Failed to check data coverage: {e}")
+            return {"has_coverage": False, "data": [], "latest_date": None}
     
     def get_stored_projects(self) -> List[str]:
         """Get list of projects stored in Azure Table Storage using optimized metadata index"""

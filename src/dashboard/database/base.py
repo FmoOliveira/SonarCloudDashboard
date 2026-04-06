@@ -1,5 +1,16 @@
 import pandas as pd
 from abc import ABC, abstractmethod
+from typing import TypedDict, Union
+
+
+class DataCoverage(TypedDict):
+    """
+    Typed contract for the return value of StorageInterface.check_data_coverage().
+    Replaces the opaque 'dict' annotation to enable static analysis and IDE completion.
+    """
+    has_coverage: bool
+    data: Union[pd.DataFrame, list]
+    latest_date: Union[str, None]
 
 
 class StorageInterface(ABC):
@@ -18,7 +29,7 @@ class StorageInterface(ABC):
         pass
 
     @abstractmethod
-    def check_data_coverage(self, project_key: str, branch: str, days: int) -> dict:
+    def check_data_coverage(self, project_key: str, branch: str, days: int) -> DataCoverage:
         """
         Checks if the database has sufficient historical data for the requested project
         and time window.
@@ -29,8 +40,7 @@ class StorageInterface(ABC):
             days (int): The number of days of history required.
             
         Returns:
-            dict: Expected to contain boolean 'has_coverage', list/DataFrame 'data',
-                  and string 'latest_date'.
+            DataCoverage: A typed dict containing has_coverage, data, and latest_date.
         """
         pass
 

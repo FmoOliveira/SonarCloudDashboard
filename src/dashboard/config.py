@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 import logging
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class AppConfig(BaseSettings):
@@ -12,11 +12,13 @@ class AppConfig(BaseSettings):
     client_id: str = Field(default="")
     client_secret: str = Field(default="")
     redirect_uri: str = Field(default="")
-    cookie_encryption_key: str = Field(default="")
+    # SecretStr prevents the key from leaking in tracebacks or repr() calls
+    cookie_encryption_key: SecretStr = Field(default=SecretStr(""))
     
     # Storage
     database_provider: str = Field(default="azure", alias="DATABASE_PROVIDER")
-    azure_storage_connection_string: str = Field(default="", alias="AZURE_STORAGE_CONNECTION_STRING")
+    # SecretStr prevents the connection string (which contains credentials) from leaking in tracebacks
+    azure_storage_connection_string: SecretStr = Field(default=SecretStr(""), alias="AZURE_STORAGE_CONNECTION_STRING")
     
     # SonarCloud
     sonarcloud_api_token: str = Field(default="", alias="SONARCLOUD_API_TOKEN")
@@ -49,7 +51,7 @@ class AppConfig(BaseSettings):
             if "cookie_encryption_key" in st.secrets and "AZURE_AD_COOKIE_ENCRYPTION_KEY" not in os.environ:
                 os.environ["AZURE_AD_COOKIE_ENCRYPTION_KEY"] = str(st.secrets["cookie_encryption_key"])
                 
-        except (FileNotFoundError, Exception) as e:
+        except Exception as e:
             logging.debug(f"Streamlit secrets extraction skipped or partially failed: {e}")
             
         return cls()

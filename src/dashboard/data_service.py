@@ -3,14 +3,26 @@ import asyncio
 import aiohttp
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
-from sonarcloud_api import SonarCloudAPI
+from sonarcloud_api import SonarCloudAPI, SonarCloudAPIError
 from dashboard_components import compress_to_parquet
 import streamlit as st
 from constants import SONAR_METRICS
 from config import config
 
-class DataServiceError(Exception): pass
+
+class DataServiceError(Exception):
+    pass
+
+
+def run_async(coro):
+    """
+    Single point of dispatch for running async coroutines in a synchronous Streamlit context.
+    Centralised here to make it trivial to swap to nest_asyncio or a thread-pool if needed.
+    """
+    return asyncio.run(coro)
+
 
 @st.cache_data(ttl=300)
 def fetch_projects(organization: str):
@@ -20,10 +32,11 @@ def fetch_projects(organization: str):
             return await api.get_organization_projects(organization)
     
     try:
-        return asyncio.run(_run())
+        return run_async(_run())
     except Exception as e:
-        logging.error(f"Error fetching projects: {str(e)}")
+        logging.error(f"Error fetching projects: {e}")
         raise DataServiceError("Error fetching projects. An internal error occurred.")
+
 
 @st.cache_data(ttl=300)
 def fetch_project_branches(project_key: str):
@@ -33,17 +46,21 @@ def fetch_project_branches(project_key: str):
             return await api.get_project_branches(project_key)
             
     try:
-        return asyncio.run(_run())
+        return run_async(_run())
     except Exception as e:
-        logging.warning(f"Could not fetch branches for {project_key}: {str(e)}")
+        logging.warning(f"Could not fetch branches for {project_key}: {e}")
         return []
+
 
 def should_retry_api_call(exc: BaseException) -> bool:
     if isinstance(exc, aiohttp.ClientResponseError):
         return exc.status in [429, 500, 502, 503, 504]
+    if isinstance(exc, SonarCloudAPIError) and exc.status_code in [429, 500, 502, 503, 504]:
+        return True
     if isinstance(exc, (aiohttp.ClientError, asyncio.TimeoutError)):
         return True
     return False
+
 
 @retry(
     wait=wait_exponential_jitter(initial=2, max=15), 
@@ -51,7 +68,13 @@ def should_retry_api_call(exc: BaseException) -> bool:
     retry=retry_if_exception(should_retry_api_call),
     reraise=True
 )
-async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key: str, token: str, days: int, branch: str | None = None) -> list:
+async def fetch_sonar_history_async(
+    session: aiohttp.ClientSession,
+    project_key: str,
+    token: str,
+    days: int,
+    branch: Optional[str] = None,
+) -> list:
     url = "https://sonarcloud.io/api/measures/search_history"
     start_date = datetime.now() - timedelta(days=days)
     end_date = datetime.now()
@@ -73,7 +96,7 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
         response.raise_for_status()
         data = await response.json()
         
-        history_dict = {}
+        history_dict: dict = {}
         if 'measures' in data:
             for measure in data['measures']:
                 metric_name = measure['metric']
@@ -83,13 +106,15 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                     
                     if date_val and value is not None:
                         if date_val not in history_dict:
-                            record = {'date': date_val, 'project_key': project_key}
+                            record: dict = {'date': date_val, 'project_key': project_key}
                             if branch:
                                 record['branch'] = branch
                             history_dict[date_val] = record
                         else:
                             record = history_dict[date_val]
                         
+                        # Single conversion point — SonarMeasure.parsed_value logic applied inline
+                        # to avoid instantiating a Pydantic object per data point at this scale.
                         if metric_name in ['coverage', 'duplicated_lines_density']:
                             record[metric_name] = float(value)
                         else:
@@ -97,12 +122,24 @@ async def fetch_sonar_history_async(session: aiohttp.ClientSession, project_key:
                             
         return list(history_dict.values())
 
+
 async def _fetch_all_projects_history(project_keys: list, token: str, days: int, branch: str) -> dict:
     connector = aiohttp.TCPConnector(limit_per_host=5)
     async with aiohttp.ClientSession(connector=connector) as session:
         tasks = [fetch_sonar_history_async(session, pk, token, days, branch) for pk in project_keys]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return dict(zip(project_keys, results))
+
+
+async def _fetch_single_project_fallback(token: str, project_key: str, branch: Optional[str]) -> Optional[dict]:
+    """
+    Module-level fallback: fetches current measures for a project that has no history.
+    Extracted from the for-loop to avoid the anti-pattern of defining async functions inside loops.
+    """
+    async with aiohttp.ClientSession() as sess:
+        api = SonarCloudAPI(token, sess)
+        return await api.get_project_measures(project_key, branch)
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _storage=None) -> bytes:
@@ -118,33 +155,35 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                 
                 if coverage_info["has_coverage"]:
                     stored_data = coverage_info.get("data", [])
-                    if stored_data is not None and (isinstance(stored_data, pd.DataFrame) and not stored_data.empty or (isinstance(stored_data, list) and stored_data)):
+                    if stored_data is not None and (
+                        isinstance(stored_data, pd.DataFrame) and not stored_data.empty
+                        or (isinstance(stored_data, list) and stored_data)
+                    ):
                         logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
                         if len(stored_data) >= getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000):
-                            logging.warning(f"Data retrieval limit ({getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000)}) reached.")
+                            logging.warning(f"Data retrieval limit reached for {project_key}.")
 
-                        if isinstance(stored_data, pd.DataFrame):
-                            dfs_to_concat.append(stored_data)
-                        else:
-                            dfs_to_concat.append(pd.DataFrame(stored_data))
+                        dfs_to_concat.append(
+                            stored_data if isinstance(stored_data, pd.DataFrame)
+                            else pd.DataFrame(stored_data)
+                        )
                         need_fresh_data = False
                 else:
                     logging.info(f"Fetching fresh data for {project_key}...")
                     
             except Exception as e:
-                logging.warning(f"Storage check failed for {project_key}: {str(e)}")
+                logging.warning(f"Storage check failed for {project_key}: {e}")
         
         if need_fresh_data:
-             projects_to_fetch.append(project_key)
+            projects_to_fetch.append(project_key)
     
     if projects_to_fetch:
         token = config.sonarcloud_api_token
-        
-        raw_results = asyncio.run(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
+        raw_results = run_async(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
         
         for project_key, result in raw_results.items():
             if isinstance(result, Exception):
-                logging.error(f"Failed to fetch {project_key}: {str(result)}")
+                logging.error(f"Failed to fetch history for {project_key}: {result}")
             else:
                 if result:
                     df_to_store = pd.DataFrame(result)
@@ -153,30 +192,29 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                         try:
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
-                                logging.info(f"Stored {len(result)} new records for {project_key}")
+                                logging.info(f"Stored {len(result)} records for {project_key}")
                             else:
-                                logging.error("Failed to store metrics data internally.")
+                                logging.error(f"Failed to store metrics data for {project_key}.")
                         except Exception as e:
-                            logging.warning(f"Could not store data for {project_key}: {str(e)}")
+                            logging.warning(f"Could not store data for {project_key}: {e}")
                 else:
+                    # No history — fall back to point-in-time measures
                     try:
-                        async def _fallback_measure():
-                            async with aiohttp.ClientSession() as sess:
-                                api = SonarCloudAPI(token, sess)
-                                return await api.get_project_measures(project_key, branch)
-                        
-                        measures = asyncio.run(_fallback_measure())
+                        measures = run_async(_fetch_single_project_fallback(token, project_key, branch))
                         if measures:
                             measures['project_key'] = project_key
                             measures['date'] = datetime.now().replace(tzinfo=None).strftime('%Y-%m-%d')
                             df_to_store = pd.DataFrame([measures])
                             dfs_to_concat.append(df_to_store)
                             if _storage:
-                                success = _storage.store_metrics_data(df_to_store, project_key, branch)
+                                _storage.store_metrics_data(df_to_store, project_key, branch)
                     except Exception as e:
-                        logging.error(f"Fallback fetch failed for {project_key}: {str(e)}")
+                        logging.error(f"Fallback fetch failed for {project_key}: {e}")
     
-    df = pd.concat(dfs_to_concat, ignore_index=True) if dfs_to_concat else pd.DataFrame()
+    if not dfs_to_concat:
+        return compress_to_parquet(pd.DataFrame())
+    
+    df = pd.concat(dfs_to_concat, ignore_index=True)
     
     if not df.empty and 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', errors='coerce', utc=True)
@@ -184,8 +222,9 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
         
         available_numeric = [col for col in SONAR_METRICS if col in df.columns]
         if available_numeric:
-            converted = {col: pd.to_numeric(df[col], errors='coerce') for col in available_numeric}
-            df = df.assign(**converted)
+            # Single numeric conversion pass — values from history are already typed correctly
+            # but we ensure consistency across all sources (storage, API fallback, etc.)
+            df = df.assign(**{col: pd.to_numeric(df[col], errors='coerce') for col in available_numeric})
 
             agg_dict = {col: 'mean' for col in available_numeric}
             other_cols = [col for col in df.columns if col not in available_numeric + ['date', 'project_key']]
@@ -194,17 +233,14 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
             
             df = df.groupby(['project_key', 'date'], observed=True).agg(agg_dict).reset_index()
             
+            # Round and downcast in one pass
             for col in available_numeric:
                 if col in df.columns:
-                    df[col] = df[col].round(2)
-
+                    df[col] = pd.to_numeric(df[col], downcast='float').round(2)
+            
             if 'project_key' in df.columns:
                 df['project_key'] = df['project_key'].astype('category')
             if 'branch' in df.columns:
                 df['branch'] = df['branch'].astype('category')
-
-            for col in available_numeric:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], downcast='float')
     
-    return compress_to_parquet(df) if dfs_to_concat else compress_to_parquet(pd.DataFrame())
+    return compress_to_parquet(df)

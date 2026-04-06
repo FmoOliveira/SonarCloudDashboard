@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from ui_styles import render_theme_toggle
 from auth_manager import do_logout
-import html
+from data_service import fetch_project_branches
 from html_factory import get_profile_photo_html, get_profile_initials_html, get_profile_name_html, get_heading_html
 
 def _release_memory_safely(*session_keys: str) -> None:
@@ -35,7 +35,7 @@ def render_sidebar(is_demo_mode: bool, projects: list, cookies, safe_user_name, 
     with st.sidebar:
         render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_popover_label)
         
-        st.markdown(get_heading_html("Controls", "iconoir-settings"), unsafe_allow_html=True)
+        st.markdown(get_heading_html("Controls", "iconoir-settings", top_margin=True), unsafe_allow_html=True)
         
         project_names = {p.key: p.name for p in projects}
 
@@ -50,7 +50,6 @@ def render_sidebar(is_demo_mode: bool, projects: list, cookies, safe_user_name, 
         if is_demo_mode:
             branch_options = ["main"]
         else:
-            from data_service import fetch_project_branches
             branches = fetch_project_branches(selected_project)
             branch_options = [b.name for b in branches]
 

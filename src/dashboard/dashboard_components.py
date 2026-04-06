@@ -5,7 +5,9 @@ import pandas as pd
 import numpy as np
 import io
 import html
+import logging
 from typing import Optional
+from plotly.subplots import make_subplots
 
 # Modern dashboard palette
 CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -104,7 +106,6 @@ def render_dynamic_subplots(df: pd.DataFrame, metrics: list, project_names: dict
     # to avoid O(N) string manipulations in the Plotly rendering loop.
     metric_display_names = {m: m.replace('_', ' ').title() for m in metrics}
 
-    from plotly.subplots import make_subplots
     fig = make_subplots(
         rows=num_metrics, 
         cols=1, 
@@ -296,9 +297,8 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     try:
         metrics.sort(key=lambda m: plot_data[m].max() if m in plot_data.columns else 0, reverse=True)
     except Exception as e:
-        import logging
         logging.warning(f"Failed to sort area metrics by max value: {e}")
-        pass # fallback to default order
+        pass  # fallback to default order
 
     # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
     # to avoid O(N) string manipulations in the Plotly rendering loop.
@@ -605,6 +605,5 @@ def decompress_from_parquet(parquet_bytes: bytes) -> pd.DataFrame:
         buffer = io.BytesIO(parquet_bytes)
         return pd.read_parquet(buffer, engine='pyarrow')
     except Exception as e:
-        import logging
-        logging.error(f"Failed to decompress Parquet data: {str(e)}")
+        logging.error(f"Failed to decompress Parquet data: {e}")
         return pd.DataFrame()
