@@ -178,3 +178,15 @@ div[data-testid="stToggle"] div[role="switch"] {
 div[data-testid="stToggle"] div[role="switch"][aria-checked="true"] {
     background-color: #2563EB !important;
 }
+
+/* Toast Notification */
+div[data-testid="stToast"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #D5D0C5 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+div[data-testid="stToast"] div, 
+div[data-testid="stToast"] span, 
+div[data-testid="stToast"] p {
+    color: #1A1814 !important;
+}
