@@ -1,5 +1,5 @@
 import unittest
-from azure_storage import AzureTableStorage
+from database.azure_storage import AzureTableStorage
 from unittest.mock import MagicMock, patch
 import hashlib
 

@@ -74,14 +74,7 @@ from html_factory import get_metric_card_html
 
 def create_metric_card(title: str, value: str, icon_class: str, delta: Optional[str] = None, delta_color: str = "#888888", neon_class: str = "neon-green"):
     """Create a metric card with title, value, and Iconoir icon, using Neon Dark Theme styling."""
-    safe_title = html.escape(title)
-    safe_value = html.escape(value)
-    safe_icon = html.escape(icon_class)
-    safe_neon_class = html.escape(neon_class)
-    safe_delta = html.escape(delta) if delta else None
-    safe_color = html.escape(delta_color) if delta_color else None
-
-    card_html = get_metric_card_html(safe_title, safe_value, safe_icon, safe_neon_class, safe_delta, safe_color)
+    card_html = get_metric_card_html(title, value, icon_class, neon_class, delta, delta_color)
     st.markdown(card_html, unsafe_allow_html=True)
 
 

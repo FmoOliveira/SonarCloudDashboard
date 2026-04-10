@@ -140,3 +140,5 @@ cython_debug/
 # VS Code settings
 .vscode/
 .streamlit/secrets.toml
+audits/testing_evaluation.md
+test_output.txt

@@ -1,24 +1,30 @@
-import unittest
-from unittest.mock import patch
+import pytest
+import aiohttp
+from unittest.mock import MagicMock, AsyncMock
 from sonarcloud_api import SonarCloudAPI
 
-class TestAPISecurity(unittest.TestCase):
-    def test_request_timeout(self):
-        """Test that API requests include a timeout"""
-        api = SonarCloudAPI("test_token")
+@pytest.mark.asyncio
+async def test_request_timeout():
+    """Test that API requests include a timeout"""
+    mock_session = MagicMock()
+    # Mock the context manager for session.get
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.json.return_value = {"components": [], "paging": {"total": 0}}
+    
+    # Needs to return a context manager
+    mock_session.get.return_value.__aenter__.return_value = mock_response
+    
+    api = SonarCloudAPI("test_token", session=mock_session)
 
-        with patch.object(api.session, 'get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = {}
+    # Call a method that triggers a request
+    await api.get_organization_projects("test_org")
 
-            # Call a method that triggers a request
-            api.get_organization_projects("test_org")
-
-            # Verify timeout was passed
-            mock_get.assert_called()
-            call_kwargs = mock_get.call_args.kwargs
-            self.assertIn('timeout', call_kwargs, "Timeout parameter missing in API request")
-            self.assertEqual(call_kwargs['timeout'], 30, "Timeout should be set to 30 seconds")
-
-if __name__ == '__main__':
-    unittest.main()
+    # Verify session.get was called
+    mock_session.get.assert_called()
+    
+    # Check that timeout is passed
+    call_kwargs = mock_session.get.call_args.kwargs
+    assert 'timeout' in call_kwargs, "Timeout parameter missing in API request"
+    assert isinstance(call_kwargs['timeout'], aiohttp.ClientTimeout)
+    assert call_kwargs['timeout'].total == 30

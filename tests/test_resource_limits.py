@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 # Import the module to patch the constant later
-from azure_storage import AzureTableStorage
+from database.azure_storage import AzureTableStorage
 
 class TestResourceLimits(unittest.TestCase):
     def setUp(self):
@@ -12,7 +12,7 @@ class TestResourceLimits(unittest.TestCase):
             mock_service_client.return_value.get_table_client.return_value = self.mock_table_client
             self.storage = AzureTableStorage(self.connection_string, self.table_name)
 
-    @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
+    @patch('database.azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
     def test_retrieve_metrics_limit(self):
         """Test that retrieve_metrics_data stops after limit"""
         # Create an iterator with 20 items
@@ -24,7 +24,7 @@ class TestResourceLimits(unittest.TestCase):
         # Verify result length matches the limit
         self.assertEqual(len(results), 10)
 
-    @patch('azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
+    @patch('database.azure_storage.AzureTableStorage.MAX_RETRIEVAL_LIMIT', 10)
     def test_get_stored_projects_limit(self):
         """Test that get_stored_projects stops after limit (slow path)"""
         # Ensure fast path is skipped (missing metadata)

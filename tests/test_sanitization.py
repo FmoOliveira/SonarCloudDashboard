@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from azure_storage import AzureTableStorage
+from database.azure_storage import AzureTableStorage
 import pandas as pd
 
 class TestAzureStorageSanitization(unittest.TestCase):

@@ -27,7 +27,9 @@ class SonarCloudAPI:
         
     async def _make_async_request(self, endpoint: str, params: dict | None = None) -> dict:
         url = f"{self.base_url}/{endpoint}"
-        async with self.session.get(url, params=params, headers=self.headers) as response:
+        # Mandatory 30s timeout for security and reliability
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with self.session.get(url, params=params, headers=self.headers, timeout=timeout) as response:
             if response.status == 200:
                 return await response.json()
             error_msg = await response.text()
@@ -37,7 +39,9 @@ class SonarCloudAPI:
             )
 
     async def _fetch_page(self, url: str, params: dict) -> dict:
-        async with self.session.get(url, params=params, headers=self.headers) as response:
+        # Mandatory 30s timeout for security and reliability
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with self.session.get(url, params=params, headers=self.headers, timeout=timeout) as response:
             if response.status == 200:
                 return await response.json()
             error_msg = await response.text()

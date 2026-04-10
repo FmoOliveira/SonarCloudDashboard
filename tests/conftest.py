@@ -1,6 +1,23 @@
 import pytest
 import os
 from unittest.mock import MagicMock, patch
+from pydantic import SecretStr
+
+@pytest.fixture(autouse=True)
+def mock_config():
+    """
+    Globally mock the config object to provide consistent testing values 
+    and handle SecretStr unwrapping logic.
+    """
+    with patch("config.config") as m_config:
+        m_config.sonarcloud_api_token = SecretStr("fake-sonar-token")
+        m_config.sonarcloud_organization_key = "fake-org"
+        m_config.tenant_id = "fake-tenant"
+        m_config.client_id = "fake-client-id"
+        m_config.client_secret = SecretStr("fake-client-secret")
+        m_config.redirect_uri = "http://localhost:8501"
+        m_config.azure_storage_connection_string = SecretStr("fake-conn-string")
+        yield m_config
 
 @pytest.fixture
 def mock_st_secrets():
@@ -40,18 +57,21 @@ def mock_sonarcloud_api():
         {"name": "main", "isMain": True},
         {"name": "develop", "isMain": False}
     ]
+    # Return realistic measure objects if needed, or simple dicts
     api.get_project_measures.return_value = {"coverage": 85.5, "bugs": 2}
     return api
 
 @pytest.fixture
 def mock_storage_client():
     storage = MagicMock()
-    # By default, say there's no coverage to force fresh fetch in testing,
-    # or override in specific tests
+    # Updated to match DataCoverage TypedDict (including record_count etc)
     storage.check_data_coverage.return_value = {
         "has_coverage": False,
         "latest_date": None,
-        "data": None
+        "data": None,
+        "record_count": 0,
+        "days_since_latest": None,
+        "missing_metrics": []
     }
     storage.store_metrics_data.return_value = True
     return storage

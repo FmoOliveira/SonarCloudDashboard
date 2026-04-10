@@ -1,8 +1,3 @@
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src/dashboard'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src/dashboard/database'))
-
 import pytest
 import pandas as pd
 from dashboard_view import compute_metric_stats
