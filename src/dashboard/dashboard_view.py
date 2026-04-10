@@ -307,11 +307,14 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
         }
 
         st.dataframe(display_data, use_container_width=True, hide_index=True, column_config=column_config)
-        
-        csv = display_data.to_csv(index=False)
+        @st.cache_data(show_spinner=False)
+        def _convert_df_to_csv(df_to_convert):
+            return df_to_convert.to_csv(index=False).encode('utf-8')
+            
+        csv_bytes = _convert_df_to_csv(display_data)
         st.download_button(
             label="Download as CSV",
-            data=csv,
+            data=csv_bytes,
             file_name=f"sonarcloud_metrics_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
             use_container_width=True,

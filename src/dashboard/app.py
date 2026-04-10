@@ -5,7 +5,7 @@ import html
 import os
 import sys
 
-from streamlit_cookies_manager import CookieManager
+from streamlit_cookies_manager_local import CookieManager
 from database.factory import get_storage_client
 from dashboard_components import decompress_from_parquet
 from models import SonarProject
