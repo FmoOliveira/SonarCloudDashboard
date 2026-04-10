@@ -31,15 +31,15 @@ def init_storage_client():
 def main():
     inject_custom_css()
     load_css("styles.css")
-    if "theme_toggle" not in st.session_state:
-        st.session_state.theme_toggle = False
-    apply_theme_overrides()
-    st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
-    
     cookies = CookieManager()
     if not cookies.ready():
         st.stop()
         
+    if "theme_toggle" not in st.session_state:
+        st.session_state.theme_toggle = False
+    apply_theme_overrides(cookies)
+    st.markdown('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css">', unsafe_allow_html=True)
+    
     auth_token = handle_auth(cookies)
     
     is_demo_mode = "--demo-mode" in sys.argv or os.environ.get("DEMO_MODE") == "1"
@@ -49,7 +49,7 @@ def main():
         if not is_demo_mode:
             auth_url = get_login_url(cookies)
             with st.sidebar:
-                render_theme_toggle()
+                render_theme_toggle(cookies)
             render_login_page(auth_url)
             # We return early but do NOT call st.stop(). 
             # This allows the script to reach completion, ensuring the CookieManager 

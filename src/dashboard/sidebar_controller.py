@@ -25,7 +25,7 @@ def render_profile(cookies, safe_user_name, safe_photo_b64, safe_initials, safe_
         
         st.markdown(get_profile_name_html(safe_user_name), unsafe_allow_html=True)
         
-        render_theme_toggle()
+        render_theme_toggle(cookies)
         
         st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
         if st.button("Logout", use_container_width=True, type="primary", icon=":material/logout:"):

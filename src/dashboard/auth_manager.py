@@ -11,7 +11,7 @@ from config import config
 SCOPES = ["User.Read"]
 
 # All session-persistent cookie keys (restored on every page load)
-AUTH_COOKIE_KEYS = ["auth_token", "user_info_name", "user_photo", "auth_state"]
+AUTH_COOKIE_KEYS = ["auth_token", "user_info_name", "auth_state", "theme_mode"]
 
 # Fast in-memory cache key — populated from cookie on first run per session
 _SESSION_TOKEN_CACHE = "_auth_token_cache"
@@ -107,6 +107,34 @@ def _get_user_photo(access_token: str) -> str:
         return ""
 
 
+import os
+import hashlib
+
+def _get_photo_cache_path(user_name: str) -> str:
+    h = hashlib.md5(user_name.encode('utf-8', errors='ignore')).hexdigest()
+    path = os.path.join(os.path.dirname(__file__), ".photo_cache")
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+    return os.path.join(path, f"{h}.txt")
+
+def _save_user_photo_cache(user_name: str, photo_b64: str) -> None:
+    try:
+        if photo_b64:
+            with open(_get_photo_cache_path(user_name), "w", encoding='utf-8') as f:
+                f.write(photo_b64)
+    except Exception as e:
+        logging.warning(f"Could not save user photo to local cache: {e}")
+
+def _load_user_photo_cache(user_name: str) -> str:
+    try:
+        path = _get_photo_cache_path(user_name)
+        if os.path.exists(path):
+            with open(path, "r", encoding='utf-8') as f:
+                return f.read()
+    except Exception as e:
+        logging.warning(f"Could not load user photo from local cache: {e}")
+    return ""
+
 def encrypt_val(val: str) -> str:
     if not val:
         return val
@@ -171,10 +199,14 @@ def get_auth_token(cookies) -> str:
 
 def get_user_info(cookies) -> tuple[str, str]:
     name = cookies.get("user_info_name")
-    photo = cookies.get("user_photo")
+    
     # Tampered cookies trigger session invalidation
     decrypted_name = decrypt_val(name, invalidate_on_failure=True) if name else None
-    decrypted_photo = decrypt_val(photo, invalidate_on_failure=True) if photo else None
+    
+    decrypted_photo = ""
+    if decrypted_name:
+        decrypted_photo = _load_user_photo_cache(decrypted_name)
+        
     return decrypted_name, decrypted_photo
 
 
@@ -245,7 +277,7 @@ def handle_auth(cookies) -> str:
 
                 photo_b64 = _get_user_photo(auth_token)
                 if photo_b64:
-                    cookies["user_photo"] = encrypt_val(photo_b64)
+                    _save_user_photo_cache(name, photo_b64)
 
                 # ✅ Single batched save — covers auth_state removal + all session cookies
                 _single_save(cookies)
