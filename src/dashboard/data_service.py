@@ -2,6 +2,8 @@ import pandas as pd
 import asyncio
 import aiohttp
 import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 from typing import Optional
 from tenacity import retry, wait_exponential_jitter, stop_after_attempt, retry_if_exception
@@ -28,13 +30,13 @@ def run_async(coro):
 def fetch_projects(organization: str):
     async def _run():
         async with aiohttp.ClientSession() as session:
-            api = SonarCloudAPI(config.sonarcloud_api_token, session)
+            api = SonarCloudAPI(config.sonarcloud_api_token.get_secret_value(), session)
             return await api.get_organization_projects(organization)
     
     try:
         return run_async(_run())
     except Exception as e:
-        logging.error(f"Error fetching projects: {e}")
+        logger.error(f"Error fetching projects: {e}")
         raise DataServiceError("Error fetching projects. An internal error occurred.")
 
 
@@ -42,13 +44,13 @@ def fetch_projects(organization: str):
 def fetch_project_branches(project_key: str):
     async def _run():
         async with aiohttp.ClientSession() as session:
-            api = SonarCloudAPI(config.sonarcloud_api_token, session)
+            api = SonarCloudAPI(config.sonarcloud_api_token.get_secret_value(), session)
             return await api.get_project_branches(project_key)
             
     try:
         return run_async(_run())
     except Exception as e:
-        logging.warning(f"Could not fetch branches for {project_key}: {e}")
+        logger.warning(f"Could not fetch branches for {project_key}: {e}")
         return []
 
 
@@ -159,9 +161,9 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                         isinstance(stored_data, pd.DataFrame) and not stored_data.empty
                         or (isinstance(stored_data, list) and stored_data)
                     ):
-                        logging.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
+                        logger.info(f"Using stored records for {project_key} (latest: {coverage_info['latest_date']})")
                         if len(stored_data) >= getattr(_storage, 'MAX_RETRIEVAL_LIMIT', 10000):
-                            logging.warning(f"Data retrieval limit reached for {project_key}.")
+                            logger.warning(f"Data retrieval limit reached for {project_key}.")
 
                         dfs_to_concat.append(
                             stored_data if isinstance(stored_data, pd.DataFrame)
@@ -169,21 +171,21 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                         )
                         need_fresh_data = False
                 else:
-                    logging.info(f"Fetching fresh data for {project_key}...")
+                    logger.info(f"Fetching fresh data for {project_key}...")
                     
             except Exception as e:
-                logging.warning(f"Storage check failed for {project_key}: {e}")
+                logger.warning(f"Storage check failed for {project_key}: {e}")
         
         if need_fresh_data:
             projects_to_fetch.append(project_key)
     
     if projects_to_fetch:
-        token = config.sonarcloud_api_token
+        token = config.sonarcloud_api_token.get_secret_value()
         raw_results = run_async(_fetch_all_projects_history(projects_to_fetch, token, days, branch))
         
         for project_key, result in raw_results.items():
             if isinstance(result, Exception):
-                logging.error(f"Failed to fetch history for {project_key}: {result}")
+                logger.error(f"Failed to fetch history for {project_key}: {result}")
             else:
                 if result:
                     df_to_store = pd.DataFrame(result)
@@ -192,11 +194,11 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                         try:
                             success = _storage.store_metrics_data(df_to_store, project_key, branch)
                             if success:
-                                logging.info(f"Stored {len(result)} records for {project_key}")
+                                logger.info(f"Stored {len(result)} records for {project_key}")
                             else:
-                                logging.error(f"Failed to store metrics data for {project_key}.")
+                                logger.error(f"Failed to store metrics data for {project_key}.")
                         except Exception as e:
-                            logging.warning(f"Could not store data for {project_key}: {e}")
+                            logger.warning(f"Could not store data for {project_key}: {e}")
                 else:
                     # No history — fall back to point-in-time measures
                     try:
@@ -209,7 +211,7 @@ def fetch_metrics_data(project_keys: list, days: int, branch: str = "master", _s
                             if _storage:
                                 _storage.store_metrics_data(df_to_store, project_key, branch)
                     except Exception as e:
-                        logging.error(f"Fallback fetch failed for {project_key}: {e}")
+                        logger.error(f"Fallback fetch failed for {project_key}: {e}")
     
     if not dfs_to_concat:
         return compress_to_parquet(pd.DataFrame())

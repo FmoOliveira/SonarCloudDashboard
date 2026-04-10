@@ -1,5 +1,7 @@
 import streamlit as st
 import logging
+
+logger = logging.getLogger(__name__)
 import html
 from database.base import StorageInterface
 from config import config
@@ -23,7 +25,7 @@ def get_storage_client() -> StorageInterface | None:
             # never stored in a variable that persists beyond this scope.
             connection_string = config.azure_storage_connection_string.get_secret_value()
             if not connection_string:
-                logging.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.")
+                logger.error("Security Configuration Error: Missing 'connection_string' in [azure_storage] or environment.")
                 st.error("Security Configuration Error: A required configuration key is missing.", icon="🚨")
                 st.stop()
             return AzureTableStorage(connection_string)
@@ -44,11 +46,11 @@ def get_storage_client() -> StorageInterface | None:
         # RuntimeError is raised by get_msal_client() and _get_fernet() when a
         # required config key is missing. We catch it here (outside any
         # @st.cache_resource boundary) so we can safely call st.error/st.stop().
-        logging.critical(f"Configuration Error: {e}")
+        logger.critical(f"Configuration Error: {e}")
         st.error(f"System configuration error: {e}", icon="🚨")
         st.stop()
     except Exception as e:
-        logging.critical(f"Database Factory Initialization Error: {str(e)}")
+        logger.critical(f"Database Factory Initialization Error: {str(e)}")
         st.error("Database Initialization Error: An internal system error occurred.", icon="🚨")
         st.stop()
         

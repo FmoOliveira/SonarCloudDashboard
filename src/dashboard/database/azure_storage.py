@@ -1,6 +1,8 @@
 import re
 import hashlib
 import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from itertools import islice
 from azure.data.tables import TableServiceClient
@@ -132,7 +134,7 @@ class AzureTableStorage(StorageInterface):
                     try:
                         self.table_client.submit_transaction(operations)
                     except Exception as batch_error:
-                        logging.error(f"Failed to store transaction batch: {str(batch_error)}")
+                        logger.error(f"Failed to store transaction batch: {str(batch_error)}")
                         return False
 
             # Update metadata partition
@@ -146,12 +148,12 @@ class AzureTableStorage(StorageInterface):
                     "LastUpdated": datetime.now().isoformat()
                 })
             except Exception as e:
-                logging.warning(f"Failed to update project metadata: {str(e)}")
+                logger.warning(f"Failed to update project metadata: {str(e)}")
 
             return True
             
         except Exception as e:
-            logging.error(f"Failed to store metrics data: {str(e)}")
+            logger.error(f"Failed to store metrics data: {str(e)}")
             return False
     
     def retrieve_metrics_data(self, project_key: str, branch: Optional[str] = None, days: int = 30) -> List[Dict]:
@@ -225,7 +227,7 @@ class AzureTableStorage(StorageInterface):
             return results
             
         except Exception as e:
-            logging.warning(f"Failed to retrieve metrics data: {str(e)}")
+            logger.warning(f"Failed to retrieve metrics data: {str(e)}")
             return []
     
     def check_data_coverage(self, project_key: str, branch: str = None, days: int = 30) -> DataCoverage:
@@ -280,7 +282,7 @@ class AzureTableStorage(StorageInterface):
             }
             
         except Exception as e:
-            logging.warning(f"Failed to check data coverage: {e}")
+            logger.warning(f"Failed to check data coverage: {e}")
             return {"has_coverage": False, "data": [], "latest_date": None}
     
     def get_stored_projects(self) -> List[str]:
@@ -347,12 +349,12 @@ class AzureTableStorage(StorageInterface):
                     "LastUpdated": datetime.now().isoformat()
                 })
             except Exception as backfill_error:
-                logging.warning(f"Metadata backfill failed: {str(backfill_error)}")
+                logger.warning(f"Metadata backfill failed: {str(backfill_error)}")
 
             return project_list
             
         except Exception as e:
-            logging.warning(f"Failed to retrieve stored projects: {str(e)}")
+            logger.warning(f"Failed to retrieve stored projects: {str(e)}")
             return []
     
     def delete_project_data(self, project_key: str, branch: str = None) -> bool:
@@ -413,10 +415,10 @@ class AzureTableStorage(StorageInterface):
 
             except Exception as e:
                 # Log but don't fail
-                logging.warning(f"Failed to cleanup metadata: {str(e)}")
+                logger.warning(f"Failed to cleanup metadata: {str(e)}")
 
             return True
             
         except Exception as e:
-            logging.error(f"Failed to delete project data: {str(e)}")
+            logger.error(f"Failed to delete project data: {str(e)}")
             return False

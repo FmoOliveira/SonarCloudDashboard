@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 import asyncio
 import aiohttp
 from typing import List, Dict, Optional
@@ -68,7 +70,7 @@ class SonarCloudAPI:
             for r in results:
                 if isinstance(r, Exception):
                     # Log individual page failures but continue — partial results are acceptable
-                    logging.warning(f"Failed to fetch a projects page: {r}")
+                    logger.warning(f"Failed to fetch a projects page: {r}")
                 else:
                     for comp in r.get('components', []):
                         projects.append(SonarProject(**comp))
@@ -153,7 +155,7 @@ class SonarCloudAPI:
         
         for result in all_measures:
             if isinstance(result, Exception):
-                logging.warning(f"Failed to fetch measures for a project: {result}")
+                logger.warning(f"Failed to fetch measures for a project: {result}")
                 continue
             if result:
                 metrics.projects_with_data += 1

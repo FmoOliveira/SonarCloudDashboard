@@ -6,6 +6,8 @@ import numpy as np
 import io
 import html
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import Optional
 from plotly.subplots import make_subplots
 
@@ -297,7 +299,7 @@ def render_area_chart(df: pd.DataFrame, date_col: str, metrics: list) -> go.Figu
     try:
         metrics.sort(key=lambda m: plot_data[m].max() if m in plot_data.columns else 0, reverse=True)
     except Exception as e:
-        logging.warning(f"Failed to sort area metrics by max value: {e}")
+        logger.warning(f"Failed to sort area metrics by max value: {e}")
         pass  # fallback to default order
 
     # ⚡ Bolt Optimization: Pre-compute dictionary mapping for O(1) lookups
@@ -605,5 +607,5 @@ def decompress_from_parquet(parquet_bytes: bytes) -> pd.DataFrame:
         buffer = io.BytesIO(parquet_bytes)
         return pd.read_parquet(buffer, engine='pyarrow')
     except Exception as e:
-        logging.error(f"Failed to decompress Parquet data: {e}")
+        logger.error(f"Failed to decompress Parquet data: {e}")
         return pd.DataFrame()

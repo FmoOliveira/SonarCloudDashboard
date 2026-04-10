@@ -1,6 +1,7 @@
 import pandas as pd
 from abc import ABC, abstractmethod
-from typing import TypedDict, Union
+from typing import TypedDict, Union, Optional
+from typing_extensions import NotRequired
 
 
 class DataCoverage(TypedDict):
@@ -11,6 +12,9 @@ class DataCoverage(TypedDict):
     has_coverage: bool
     data: Union[pd.DataFrame, list]
     latest_date: Union[str, None]
+    record_count: NotRequired[Optional[int]]
+    days_since_latest: NotRequired[Optional[int]]
+    missing_metrics: NotRequired[Optional[list[str]]]
 
 
 class StorageInterface(ABC):

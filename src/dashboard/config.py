@@ -4,13 +4,15 @@ import logging
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
+
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AZURE_AD_", extra="ignore")
 
     # Authentication (Azure AD)
     tenant_id: str = Field(default="")
     client_id: str = Field(default="")
-    client_secret: str = Field(default="")
+    client_secret: SecretStr = Field(default=SecretStr(""))
     redirect_uri: str = Field(default="")
     # SecretStr prevents the key from leaking in tracebacks or repr() calls
     cookie_encryption_key: SecretStr = Field(default=SecretStr(""))
@@ -21,7 +23,7 @@ class AppConfig(BaseSettings):
     azure_storage_connection_string: SecretStr = Field(default=SecretStr(""), alias="AZURE_STORAGE_CONNECTION_STRING")
     
     # SonarCloud
-    sonarcloud_api_token: str = Field(default="", alias="SONARCLOUD_API_TOKEN")
+    sonarcloud_api_token: SecretStr = Field(default=SecretStr(""), alias="SONARCLOUD_API_TOKEN")
     sonarcloud_organization_key: str = Field(default="", alias="SONARCLOUD_ORGANIZATION_KEY")
     
     @classmethod
@@ -52,7 +54,7 @@ class AppConfig(BaseSettings):
                 os.environ["AZURE_AD_COOKIE_ENCRYPTION_KEY"] = str(st.secrets["cookie_encryption_key"])
                 
         except Exception as e:
-            logging.debug(f"Streamlit secrets extraction skipped or partially failed: {e}")
+            logger.debug(f"Streamlit secrets extraction skipped or partially failed: {e}")
             
         return cls()
 

@@ -5,8 +5,12 @@ import base64
 import msal
 import asyncio
 import aiohttp
+import os
+import hashlib
 from cryptography.fernet import Fernet, InvalidToken
 from config import config
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["User.Read"]
 
@@ -32,7 +36,7 @@ def get_msal_client() -> msal.ConfidentialClientApplication:
     return msal.ConfidentialClientApplication(
         config.client_id,
         authority=authority,
-        client_credential=config.client_secret
+        client_credential=config.client_secret.get_secret_value()
     )
 
 
@@ -52,10 +56,11 @@ def _get_fernet() -> Fernet:
 
 
 def _get_auth_url(state: str | None = None) -> str:
+    client = None
     try:
         client = get_msal_client()
     except RuntimeError as e:
-        logging.critical(f"MSAL configuration error: {e}")
+        logger.critical(f"MSAL configuration error: {e}")
         st.error(f"Security Configuration Error: {e}", icon="🚨")
         st.stop()
     kwargs = {"redirect_uri": config.redirect_uri}
@@ -65,10 +70,11 @@ def _get_auth_url(state: str | None = None) -> str:
 
 
 def _acquire_token_by_auth_code(auth_code: str) -> dict:
+    client = None
     try:
         client = get_msal_client()
     except RuntimeError as e:
-        logging.critical(f"MSAL configuration error: {e}")
+        logger.critical(f"MSAL configuration error: {e}")
         st.error(f"Security Configuration Error: {e}", icon="🚨")
         st.stop()
     result = client.acquire_token_by_authorization_code(
@@ -77,7 +83,7 @@ def _acquire_token_by_auth_code(auth_code: str) -> dict:
         redirect_uri=config.redirect_uri
     )
     if "error" in result:
-        logging.error(f"MSAL Token Error: {result.get('error_description', result.get('error'))}")
+        logger.error(f"MSAL Token Error: {result.get('error_description', result.get('error'))}")
         st.error("Authentication Error: Failed to acquire token.", icon="🚨")
         st.stop()
     return result
@@ -96,7 +102,7 @@ async def _get_user_photo_async(access_token: str) -> str:
                     img_b64 = base64.b64encode(img_data).decode('utf-8')
                     return f"data:image/jpeg;base64,{img_b64}"
     except Exception as e:
-        logging.warning(f"Failed to fetch user photo: {e}")
+        logger.warning(f"Failed to fetch user photo: {e}")
     return ""
 
 
@@ -107,8 +113,7 @@ def _get_user_photo(access_token: str) -> str:
         return ""
 
 
-import os
-import hashlib
+
 
 def _get_photo_cache_path(user_name: str) -> str:
     h = hashlib.md5(user_name.encode('utf-8', errors='ignore')).hexdigest()
@@ -123,7 +128,7 @@ def _save_user_photo_cache(user_name: str, photo_b64: str) -> None:
             with open(_get_photo_cache_path(user_name), "w", encoding='utf-8') as f:
                 f.write(photo_b64)
     except Exception as e:
-        logging.warning(f"Could not save user photo to local cache: {e}")
+        logger.warning(f"Could not save user photo to local cache: {e}")
 
 def _load_user_photo_cache(user_name: str) -> str:
     try:
@@ -132,7 +137,7 @@ def _load_user_photo_cache(user_name: str) -> str:
             with open(path, "r", encoding='utf-8') as f:
                 return f.read()
     except Exception as e:
-        logging.warning(f"Could not load user photo from local cache: {e}")
+        logger.warning(f"Could not load user photo from local cache: {e}")
     return ""
 
 def encrypt_val(val: str) -> str:
@@ -141,11 +146,11 @@ def encrypt_val(val: str) -> str:
     try:
         return _get_fernet().encrypt(val.encode()).decode()
     except RuntimeError as e:
-        logging.critical(f"Fernet configuration error during encryption: {e}")
+        logger.critical(f"Fernet configuration error during encryption: {e}")
         st.error(f"System configuration error: {e}", icon="🚨")
         st.stop()
     except Exception as e:
-        logging.error(f"Encryption failed unexpectedly: {e}")
+        logger.error(f"Encryption failed unexpectedly: {e}")
         return ""
 
 
@@ -160,12 +165,12 @@ def decrypt_val(val: str, *, invalidate_on_failure: bool = False) -> str:
     try:
         return _get_fernet().decrypt(val.encode()).decode()
     except InvalidToken:
-        logging.warning("SECURITY: Fernet decryption failed — cookie may have been tampered with.")
+        logger.warning("SECURITY: Fernet decryption failed — cookie may have been tampered with.")
         if invalidate_on_failure:
             st.session_state["pending_logout"] = True
         return ""
     except Exception as e:
-        logging.error(f"Unexpected decryption error: {e}")
+        logger.error(f"Unexpected decryption error: {e}")
         return ""
 
 
@@ -256,7 +261,7 @@ def handle_auth(cookies) -> str:
 
         if not expected_state or returned_state != expected_state:
             _single_save(cookies)  # save the auth_state deletion
-            logging.error(f"CSRF thwarted: Expected [{expected_state}] vs Returned [{returned_state}]")
+            logger.error(f"CSRF thwarted: Expected [{expected_state}] vs Returned [{returned_state}]")
             st.error("Authentication invalid: State mismatch. Clearing session automatically...", icon="🔐")
             return ""
 
@@ -287,7 +292,7 @@ def handle_auth(cookies) -> str:
                     _single_save(cookies)
                     st.rerun()
                 else:
-                    logging.error(f"Authentication failed: {error_desc}")
+                    logger.error(f"Authentication failed: {error_desc}")
                     _single_save(cookies)
                     st.error("Authentication failed: An internal error occurred.", icon="🚨")
                     st.stop()

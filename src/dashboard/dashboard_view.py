@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from constants import SONAR_METRICS
 from dashboard_components import (
@@ -286,7 +288,7 @@ def display_dashboard(df, selected_projects, all_projects, branch_filter=None):
                 if converted_cols:
                     display_data = display_data.assign(**converted_cols)
             except Exception as e:
-                logging.warning(f"Optimization fallback: DataFrame numeric conversion failed ({e}). Falling back to string conversion.")
+                logger.warning(f"Optimization fallback: DataFrame numeric conversion failed ({e}). Falling back to string conversion.")
                 for c in target_cols:
                     display_data[c] = display_data[c].astype(str)
         

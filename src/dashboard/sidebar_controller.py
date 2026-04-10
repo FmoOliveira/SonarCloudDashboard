@@ -6,7 +6,6 @@ from data_service import fetch_project_branches
 from html_factory import get_profile_photo_html, get_profile_initials_html, get_profile_name_html, get_heading_html
 
 def _release_memory_safely(*session_keys: str) -> None:
-    keys_deleted = False
     for key in session_keys:
         if key in st.session_state:
             del st.session_state[key]
